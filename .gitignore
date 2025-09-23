@@ -1,0 +1,32 @@
+# deny-all
+/*
+
+# allowlist (root files)
+!.gitignore
+!/README.md
+!/LICENSE
+!/Cargo.toml
+!/Cargo.lock
+!/rust-toolchain.toml
+!/Makefile
+
+# allow source
+!/src/
+!/src/**
+
+# allow optional project dirs (必要なら残す/消す)
+!/.github/
+!/.github/**
+!/scripts/
+!/scripts/**
+!/docs/
+!/docs/**
+
+# (明示的に無視しておきたい一般項目)
+.DS_Store
+*.log
+tickwise.env
+.env
+**/*.env
+/data_j.csv
+/data/
