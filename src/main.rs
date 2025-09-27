@@ -3,32 +3,22 @@ use clap::Parser;
 use dotenvy::from_filename;
 use dotenvy::from_path;
 use std::fs::{create_dir_all, OpenOptions};
-//use std::fs::{OpenOptions, create_dir_all};
-//use std::fs::{self, File};
-//use chrono::NaiveDate;
 use colored::*;
 use csv::ReaderBuilder;
-//use regex::Regex;
 use reqwest::Client;
-//use serde::{Deserialize, Serialize};
 use serde::Deserialize;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
-//use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::fs::read_to_string;
 use std::io::Cursor;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-//use std::path::PathBuf;
 use ta::indicators::{BollingerBands, MovingAverageConvergenceDivergence, RelativeStrengthIndex};
 use ta::Next;
 use tempfile::NamedTempFile;
-//use url::Url;
-
-//use csv::WriterBuilder;
 use serde_json; // JSON用
 
 const EMA_EQ_EPS: f64 = 0.01; // 短期-長期の絶対差が±0.01未満なら「同値圏」
@@ -455,9 +445,7 @@ struct HardcodedInfo {
 struct AnalysisResult {
     indicator_name: String,   // 例: "基本テクニカル分析", "EMA", "SMA"
     description: Vec<String>, // 表示用の複数行テキスト（\n区切りでOK）
-    score: f64,               // 元のスコア（-2〜+2の整数値、f64型）
-    //weight: f64,              // 指標ごとの重み（例: 1.0, 1.2など）
-    //adjusted_score: f64,      // 調整後スコア（score × weight）
+    score: f64,               // 元のスコア（-2〜+2の整数値、f64型） 
 }
 // ==== 追加：最終スコアのスナップショット（唯一の真実） ====
 struct FinalScoreSnapshot {
@@ -567,12 +555,6 @@ impl TechnicalDataGuard {
     fn set_name(&mut self, value: &str) {
         self.entry.name = value.to_string();
     }
-    //fn set_ticker(&mut self, value: &str) {
-    //    self.entry.ticker = value.to_string();
-    //}
-    // fn set_date(&mut self, value: &str) {
-    //    self.entry.date = value.to_string();
-    //}
     fn set_close(&mut self, value: f64) {
         self.entry.close = value;
     }
@@ -603,9 +585,6 @@ impl TechnicalDataGuard {
     fn set_signal_score(&mut self, value: f64) {
         self.entry.signal_score = value;
     }
-    //fn build(self) -> TechnicalDataEntry {
-    //    self.entry
-    //}
     fn set_ema_short(&mut self, value: f64) {
         self.entry.ema_short = value;
     }
@@ -964,10 +943,15 @@ fn initialize_environment_and_config(
     }
     // ✅ 以降は config.ticker を唯一のソース（SoT）
     let ticker = config.ticker.clone();
-
-    let marketstack_key = env::var("MARKETSTACK_API_KEY")
-        .map_err(|_| "❌ 環境変数 MARKETSTACK_API_KEY が設定されていません")?;
-
+    
+    let needs_marketstack = !ticker.ends_with(".T");
+    let marketstack_key = if needs_marketstack {
+        env::var("MARKETSTACK_API_KEY")
+            .map_err(|_| "❌ 環境変数 MARKETSTACK_API_KEY が設定されていません")?
+    } else {
+        String::new()
+    };
+   
     let ticker_name_map = match &config.alias_csv {
         Some(csv_path) => load_alias_csv(csv_path)?,
         None => HashMap::new(),
@@ -1175,10 +1159,6 @@ fn build_config(args: &Args) -> Config {
             } else {
                 env::var("OPENAI_API_KEY").ok().unwrap_or_default()
 
-                //env::var("OPENAI_API_KEY").unwrap_or_else(|_| {
-                //    eprintln!("❌ OpenAI APIキーが指定されていません。--openai-api-key または OPENAI_API_KEY を設定してください。");
-                //    std::process::exit(1);
-                //})
             }
         },
         openai_extra_note: args
@@ -2282,8 +2262,6 @@ fn select_output_target(
                     indicator_name: "EMA".to_string(),
                     description: Vec::new(),
                     score: ema_score_value,
-                    //weight: ema_weight_value,
-                    //adjusted_score: ema_score_value * ema_weight_value,
                 });
             }
             ExtensionIndicator::Sma => {
@@ -2293,8 +2271,6 @@ fn select_output_target(
                     indicator_name: "SMA".to_string(),
                     description: Vec::new(),
                     score: sma_score_value,
-                    //weight: sma_weight_value,
-                    //adjusted_score: sma_score_value * sma_weight_value,
                 });
             }
             ExtensionIndicator::Roc => {
@@ -2304,8 +2280,6 @@ fn select_output_target(
                     indicator_name: "ROC".to_string(),
                     description: Vec::new(),
                     score: roc_score_value,
-                    //weight: roc_weight_value,
-                    //adjusted_score: roc_score_value * roc_weight_value,
                 });
             }
             ExtensionIndicator::Adx => {
@@ -2315,8 +2289,6 @@ fn select_output_target(
                     indicator_name: "ADX".to_string(),
                     description: Vec::new(),
                     score: adx_score_value,
-                    //weight: adx_weight_value,
-                    //adjusted_score: adx_score_value * adx_weight_value,
                 });
             }
             ExtensionIndicator::Stochastics => {
@@ -2326,8 +2298,6 @@ fn select_output_target(
                     indicator_name: "Stochastics".to_string(),
                     description: Vec::new(),
                     score: stoch_score_value,
-                    //weight: stoch_weight_value,
-                    //adjusted_score: stoch_score_value * stoch_weight_value,
                 });
             }
             ExtensionIndicator::Bollinger => {
@@ -2337,8 +2307,6 @@ fn select_output_target(
                     indicator_name: "Bollinger".to_string(),
                     description: Vec::new(),
                     score: bollinger_score_value,
-                    //weight: bollinger_weight_value,
-                    //adjusted_score: bollinger_score_value * bollinger_weight_value,
                 });
             }
             ExtensionIndicator::Fibonacci => {
@@ -2348,8 +2316,6 @@ fn select_output_target(
                     indicator_name: "Fibonacci".to_string(),
                     description: Vec::new(),
                     score: fibonacci_score_value,
-                    //weight: fibonacci_weight_value,
-                    //adjusted_score: fibonacci_score_value * fibonacci_weight_value,
                 });
             }
             ExtensionIndicator::Vwap => {
@@ -2359,9 +2325,7 @@ fn select_output_target(
                     indicator_name: "VWAP".to_string(),
                     description: Vec::new(),
                     score: vwap_score_value,
-                    //weight: vwap_weight_value,
-                    //adjusted_score: vwap_score_value * vwap_weight_value,
-                });
+               });
             }
             ExtensionIndicator::Ichimoku => {
                 let ichimoku_score_value = guard.get_ichimoku_score().unwrap_or(0.0);
@@ -2370,9 +2334,7 @@ fn select_output_target(
                     indicator_name: "Ichimoku".to_string(),
                     description: Vec::new(),
                     score: ichimoku_score_value,
-                    //weight: ichimoku_weight_value,
-                    //adjusted_score: ichimoku_score_value * ichimoku_weight_value,
-                });
+                 });
             }
         }
     }
@@ -2394,7 +2356,6 @@ fn technical_render_to_terminal(config: &Config, guard: &TechnicalDataGuard) {
     display_main_info(config, guard);
 
     // ② 基本テクニカル分析
-    //display_basic_score(config, guard)
     let basic_result = render_basic(config, guard);
     display_analysis_result(&basic_result);
 
@@ -2740,8 +2701,6 @@ fn render_basic(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
         indicator_name: "基本テクニカル分析".to_string(),
         description: description_lines,
         score,
-        //weight,
-        //adjusted_score,
     }
 }
 /// AnalysisResultを受け取り、内容を画面に出力する関数
@@ -2955,9 +2914,7 @@ fn render_ema(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
         indicator_name: "EMA".to_string(),
         description: description_lines,
         score: base_score as f64,
-        //weight,
-        //adjusted_score: adjusted,
-    }
+   }
 }
 
 /// SMA（単純移動平均）の表示（セキュアアクセス：TechnicalDataGuard経由）
@@ -2994,9 +2951,7 @@ fn render_sma(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "SMA".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-                //weight,
-                //adjusted_score,
-            }
+           }
         }
         None => {
             description_lines.push("⚠️ SMAスコア情報なし".to_string());
@@ -3004,8 +2959,6 @@ fn render_sma(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "SMA".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight,
-                //adjusted_score: 0.0,
             }
         }
     }
@@ -3068,8 +3021,6 @@ fn render_adx(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                         indicator_name: "ADX".to_string(),
                         description: description_lines,
                         score: base_score as f64,
-                        //weight: config.weight_adx,
-                        //adjusted_score,
                     }
                 }
                 None => {
@@ -3078,9 +3029,7 @@ fn render_adx(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                         indicator_name: "ADX".to_string(),
                         description: description_lines,
                         score: 0.0,
-                        //weight: config.weight_adx,
-                        //adjusted_score: 0.0,
-                    }
+                   }
                 }
             }
         }
@@ -3090,9 +3039,7 @@ fn render_adx(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "ADX".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight: config.weight_adx,
-                //adjusted_score: 0.0,
-            }
+           }
         }
     }
 }
@@ -3143,8 +3090,6 @@ fn render_roc(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                         indicator_name: "ROC".to_string(),
                         description: description_lines,
                         score: base_score as f64,
-                        //weight: config.weight_roc,
-                        //adjusted_score,
                     }
                 }
                 None => {
@@ -3153,9 +3098,7 @@ fn render_roc(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                         indicator_name: "ROC".to_string(),
                         description: description_lines,
                         score: 0.0,
-                        //weight: config.weight_roc,
-                        //adjusted_score: 0.0,
-                    }
+                   }
                 }
             }
         }
@@ -3165,8 +3108,6 @@ fn render_roc(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "ROC".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight: config.weight_roc,
-                //adjusted_score: 0.0,
             }
         }
     }
@@ -3219,9 +3160,7 @@ fn render_stochastics(config: &Config, guard: &TechnicalDataGuard) -> AnalysisRe
                 indicator_name: "ストキャスティクス".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-                //weight: config.weight_stochastics,
-                //adjusted_score,
-            }
+           }
         }
         None => {
             description_lines.push("⚠️ ストキャスティクススコア情報なし".to_string());
@@ -3229,9 +3168,7 @@ fn render_stochastics(config: &Config, guard: &TechnicalDataGuard) -> AnalysisRe
                 indicator_name: "ストキャスティクス".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight: config.weight_stochastics,
-                //adjusted_score: 0.0,
-            }
+          }
         }
     }
 }
@@ -3318,8 +3255,6 @@ fn render_bollinger(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
                 indicator_name: "ボリンジャーバンド".to_string(),
                 description: description_lines,
                 score: base as f64,
-                //weight,
-                //adjusted_score: adjusted,
             }
         }
         None => {
@@ -3328,8 +3263,6 @@ fn render_bollinger(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
                 indicator_name: "ボリンジャーバンド".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight,
-                //adjusted_score: 0.0,
             }
         }
     }
@@ -3353,7 +3286,6 @@ fn render_fibonacci(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
         ));
 
         // base_score は Guard に保存済み（-2,-1,0,1,2）
-        //eprintln!("guard.get_fibonacci_score={}",guard.get_fibonacci_score().unwrap());
         let base_score = guard.get_fibonacci_score().map(|v| v.round() as i32);
         let band_line = match base_score {
             Some(2) => format!(
@@ -3384,9 +3316,7 @@ fn render_fibonacci(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
     match guard.get_fibonacci_score().map(|v| v as i32) {
         Some(base_score) => {
             let adjusted_score = base_score as f64 * weight;
-            // ↓ ここは rank_fibonacci_score を使わず、上で帯メッセージを出しているので不要
-            // description_lines.push(rank_fibonacci_score(Some(base_score)).to_string());
-
+           
             description_lines.push(format!(
                 "📝 スコア調整値({:.1}) = スコア({}) × Weight({:.1})",
                 adjusted_score, base_score, weight
@@ -3395,9 +3325,7 @@ fn render_fibonacci(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
                 indicator_name: "フィボナッチ".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-                //weight,
-                //adjusted_score,
-            }
+           }
         }
         None => {
             description_lines.push("⚠️ フィボナッチスコア情報なし".to_string());
@@ -3405,9 +3333,7 @@ fn render_fibonacci(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
                 indicator_name: "フィボナッチ".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight,
-                //adjusted_score: 0.0,
-            }
+           }
         }
     }
 }
@@ -3449,9 +3375,7 @@ fn render_vwap(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "VWAP".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-                //weight,
-                //adjusted_score,
-            }
+           }
         }
         None => {
             description_lines.push("⚠️ VWAPスコア情報なし".to_string());
@@ -3459,9 +3383,7 @@ fn render_vwap(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "VWAP".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight,
-                //adjusted_score: 0.0,
-            }
+           }
         }
     }
 }
@@ -3524,8 +3446,6 @@ fn render_ichimoku(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResul
                 indicator_name: "一目均衡表".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-                //weight,
-                //adjusted_score,
             }
         }
         None => {
@@ -3534,8 +3454,6 @@ fn render_ichimoku(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResul
                 indicator_name: "一目均衡表".to_string(),
                 description: description_lines,
                 score: 0.0,
-                //weight,
-                //adjusted_score: 0.0,
             }
         }
     }
@@ -4197,11 +4115,6 @@ async fn fetch_articles_from_brave(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            //let description = item
-            //    .get("description")
-            //    .and_then(|v| v.as_str())
-            //    .unwrap_or("")
-            //    .to_string();
             let published_at = item
                 .get("page_fetched")
                 .and_then(|v| v.as_str())
