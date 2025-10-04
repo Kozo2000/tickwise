@@ -39,8 +39,6 @@ API経由で株価データを取得し、スコアリング・重み付け・�
 ---
 
 ## 必要な環境変数
-
-- `MARKETSTACK_API_KEY` : MarketStack APIキー
 - `BRAVE_API_KEY` : Brave News APIキー（任意）
 - `OPENAI_API_KEY` : OpenAI APIキー（任意）
 
