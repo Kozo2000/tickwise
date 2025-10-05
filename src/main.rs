@@ -1,10 +1,10 @@
-use chrono::{TimeZone, Utc};
+use chrono::Local;
+use chrono::TimeZone;
 use clap::Parser;
-use dotenvy::from_filename;
-use dotenvy::from_path;
-use std::fs::{create_dir_all, OpenOptions};
 use colored::*;
 use csv::ReaderBuilder;
+use dotenvy::from_filename;
+use dotenvy::from_path;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -13,14 +13,15 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs::read_to_string;
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::Cursor;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use ta::indicators::{BollingerBands, MovingAverageConvergenceDivergence, RelativeStrengthIndex};
 use ta::Next;
-use tempfile::NamedTempFile;
-use serde_json; // JSON用
+use tempfile::NamedTempFile; // JSON用
 
+type BuildCfgResult = Result<(Config, String, HashMap<String, String>), Box<dyn std::error::Error>>;
 const EMA_EQ_EPS: f64 = 0.01; // 短期-長期の絶対差が±0.01未満なら「同値圏」
                               //const NEUTRAL_DEADBAND: f64 = 0.05; // 中立の揺れ幅（±5% 未満なら見送り/様子見）
 
@@ -71,8 +72,6 @@ struct Args {
     value_parser = ["openai"], // ← いまは openai のみ
     help = "LLM provider (only 'openai' supported in this version)")]
     llm_provider: String,
-    //#[arg(long, help = "Use Brave Search API instead of NewsAPI")]
-    //use_brave: bool,
     #[arg(
         short = 'm',
         long,
@@ -195,6 +194,12 @@ struct Args {
     #[arg(long, value_parser = ["buyer","seller","holder"], default_value = "holder",
       help = "視点を選択: buyer|seller|holder（既定: holder）")]
     stance: String,
+
+    #[arg(
+        long,
+        help = "Specify your Brave API key (if not using environment variable)"
+    )]
+    brave_api_key: Option<String>,
 
     #[arg(short = 'q', long, help = "Specify a custom news search query")]
     custom_news_query: Option<String>,
@@ -383,19 +388,17 @@ struct Config {
     weight_fibonacci: f64,
     weight_vwap: f64,
     weight_ichimoku: f64,
-
+    brave_api_key: String,
     llm_provider: String,
     openai_model: String,
     openai_api_key: String,
     openai_extra_note: Option<String>,
     no_news: bool,
-    //use_brave: bool,
     custom_news_query: Option<String>,
     news_filter: bool,
     news_count: usize,
     news_freshness: String, // "pd"|"pw"|"pm"|"py"|"all"
     show_news: bool,
-    //no_alias: bool,
     save_technical_log: bool,
     log_format: String,
     log_dir: String,
@@ -412,22 +415,14 @@ struct Config {
     debug_prompt: bool,
     data_append: bool,
     log_flat: bool,
-
     debug_args: bool,
 }
 
-/// MarketStack APIからのレスポンス構造体
-/*
-#[derive(Deserialize, Debug)]
-struct MarketStackResponse {
-    data: Vec<MarketData>,
-}
-*/
 /// 時系列データ構造
 #[derive(Debug, Deserialize, Clone)]
 struct MarketData {
     date: String,
-//    open: f64,
+    //    open: f64,
     high: f64,
     low: f64,
     close: f64,
@@ -438,14 +433,14 @@ struct MarketData {
 /// ハードコードされた正式名称とクエリを保持する構造体
 struct HardcodedInfo {
     formal_name: &'static str,
-//    query: &'static str,
+    //    query: &'static str,
 }
 
 /// テクニカル指標の分析結果を保持する構造体
 struct AnalysisResult {
     indicator_name: String,   // 例: "基本テクニカル分析", "EMA", "SMA"
     description: Vec<String>, // 表示用の複数行テキスト（\n区切りでOK）
-    score: f64,               // 元のスコア（-2〜+2の整数値、f64型） 
+    score: f64,               // 元のスコア（-2〜+2の整数値、f64型）
 }
 // ==== 追加：最終スコアのスナップショット（唯一の真実） ====
 struct FinalScoreSnapshot {
@@ -855,7 +850,7 @@ fn resolve_hardcoded_info(ticker: &str) -> Option<HardcodedInfo> {
     match ticker {
         "QQQ" => Some(HardcodedInfo {
             formal_name: "Invesco QQQ Trust (NASDAQ100)",
-           // query: "QQQ OR \"NASDAQ100\"",
+            // query: "QQQ OR \"NASDAQ100\"",
         }),
         "SPY" => Some(HardcodedInfo {
             formal_name: "SPDR S&P 500 ETF Trust (S&P500)",
@@ -873,10 +868,9 @@ fn resolve_hardcoded_info(ticker: &str) -> Option<HardcodedInfo> {
     }
 }
 
-fn initialize_environment_and_config(
-) -> Result<(Config, String, String, HashMap<String, String>), Box<dyn std::error::Error>> {
+fn initialize_environment_and_config() -> BuildCfgResult {
+    // ✅ 環境変数の読み込み（tickwise.env ファイル）
     let env_path = Path::new("tickwise.env");
-
     if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
         if let Ok(mut tmpfile) = NamedTempFile::new() {
             let content = lines.join("\n");
@@ -943,27 +937,14 @@ fn initialize_environment_and_config(
     }
     // ✅ 以降は config.ticker を唯一のソース（SoT）
     let ticker = config.ticker.clone();
-    
-    let needs_marketstack = !ticker.ends_with(".T");
-    let marketstack_key = if needs_marketstack {
-        env::var("MARKETSTACK_API_KEY")
-            .map_err(|_| "❌ 環境変数 MARKETSTACK_API_KEY が設定されていません")?
-    } else {
-        String::new()
-    };
-   
+
     let ticker_name_map = match &config.alias_csv {
         Some(csv_path) => load_alias_csv(csv_path)?,
         None => HashMap::new(),
     };
     // 例: if let Some(code) = jp_code_from_ticker(&ticker) { ticker_name_map.insert(code, hardcoded.formal_name.to_string()); }
     // ハードコードされたティッカー名とクエリを追加
-    /*
-    if let Some(hardcoded) = resolve_hardcoded_info(&ticker) {
-        ticker_name_map.insert(ticker.clone(), hardcoded.formal_name.to_string());
-    }
-    */
-    Ok((config, marketstack_key, ticker, ticker_name_map))
+    Ok((config, ticker, ticker_name_map))
 }
 
 /// インデックスティッカーの変換
@@ -1147,6 +1128,7 @@ fn build_config(args: &Args) -> Config {
         } else {
             args.llm_provider.clone()
         },
+
         // OpenAI設定
         openai_model: if args.openai_model == "gpt-4.1-nano" {
             env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4.1-nano".to_string())
@@ -1158,7 +1140,13 @@ fn build_config(args: &Args) -> Config {
                 k.clone()
             } else {
                 env::var("OPENAI_API_KEY").ok().unwrap_or_default()
-
+            }
+        },
+        brave_api_key: {
+            if let Some(k) = &args.brave_api_key {
+                k.clone()
+            } else {
+                std::env::var("BRAVE_API_KEY").ok().unwrap_or_default()
             }
         },
         openai_extra_note: args
@@ -1167,14 +1155,12 @@ fn build_config(args: &Args) -> Config {
             .or_else(|| env::var("OPENAI_EXTRA_NOTE").ok()),
         // ニュース検索設定
         no_news: args.no_news || get_bool_env("NO_NEWS"),
-        //use_brave: args.use_brave || get_bool_env("USE_BRAVE"),
         custom_news_query: args
             .custom_news_query
             .clone()
             .or_else(|| env::var("CUSTOM_NEWS_QUERY").ok())
             .filter(|s| !s.trim().is_empty()),
 
-        //no_alias: args.no_alias || get_bool_env("NO_ALIAS"),
         news_filter: args.news_filter || get_bool_env("NEWS_FILTER"),
         show_news: args.show_news || get_bool_env("SHOW_NEWS"),
 
@@ -1217,7 +1203,6 @@ fn build_config(args: &Args) -> Config {
         data_append: args.data_append || get_bool_env("CSV_APPEND"),
         log_flat: args.log_flat || get_bool_env("LOG_FLAT"),
         stdout_log: args.stdout_log,
-        //show_log_header:args.show_log_header,
         silent: args.silent,
 
         // プロンプト構成：数値設定
@@ -1296,7 +1281,7 @@ fn get_f64_from_args_or_env(arg_val: f64, env_key: &str, default: f64) -> f64 {
         return default;
     }
 
-    if value < 0.5 || value > 3.0 {
+    if !(0.5..=3.0).contains(&value) {
         eprintln!(
             "⚠️ 無効なweight値 (範囲外): {}。デフォルト値({})を使用します。",
             value, default
@@ -1362,212 +1347,95 @@ fn jp_code_from_ticker(t: &str) -> Option<String> {
         return (code.len() == 4 && code.chars().all(|c| c.is_ascii_digit()))
             .then(|| code.to_string());
     }
-    (up.len() == 4 && up.chars().all(|c| c.is_ascii_digit())).then(|| up)
+    (up.len() == 4 && up.chars().all(|c| c.is_ascii_digit())).then_some(up)
 }
-
+/// Yahoo Finance から市場データを取得する
+/// Yahoo v8/chart: use only meta.chartPreviousClose, meta.currency, indicators.quote[0].(o/h/l/c), timestamp. Do NOT use previousClose/regularMarket*/adjclose.
 async fn fetch_market_data(
-    // Yahoo Finance API
-    // Yahoo! Finance 経由（日本株）
-    // 返されるJSON構造の例：
-    // {
-    //   "chart": {
-    //     "result": [{
-    //       "timestamp": [...],
-    //       "indicators": {
-    //         "quote": [{
-    //           "open": [...],
-    //           "high": [...],
-    //           "low": [...],
-    //           "close": [...]
-    //         }]
-    //       }
-    //     }],
-    //     "error": null
-    //   }
-    // }
-
-    // MarketStack API fallback
-    // MarketStack API 経由（米国株等）
-    // 返されるJSON構造の例：
-    // {
-    //   "data": [
-    //     {
-    //       "date": "20XX-XX-XXT00:00:00+0000",
-    //       "open": 123.45,
-    //       "high": 125.67,
-    //       "low": 122.89,
-    //       "close": 124.00,
-    //       ...
-    //     },
-    //     ...
-    //   ]
-    // }
     ticker: &str,
-    marketstack_key: &str,
-    config: &Config,
+    //config: &Config,
 ) -> Result<Vec<MarketData>, Box<dyn std::error::Error>> {
-    // 日本株判定（同じ条件でメッセージとデータソースを決定）
-    let t_raw = ticker.trim();
-    let lo = t_raw.to_ascii_lowercase();
-    let is_jp_equity =
-        lo.ends_with(".t") || (lo.len() == 4 && lo.chars().all(|c| c.is_ascii_digit()));
+    let ysym = if let Some(code) = jp_code_from_ticker(ticker) {
+        format!("{}.T", code)
+    } else {
+        ticker.trim().to_string()
+    };
 
-    if is_jp_equity && !config.silent{
-        eprintln!("🇯🇵 Yahoo Finance APIを使用します");
-
-        // 4桁コードなら .T を付け、末尾が .t なら大文字に統一
-        let ysym = if lo.ends_with(".t") {
-            t_raw.to_ascii_uppercase() // 例: 2244.t → 2244.T
-        } else {
-            format!("{t_raw}.T") // 例: 2244 → 2244.T
-        };
-
-        let url = format!(
-            "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=3mo",
-            urlencoding::encode(&ysym)
-        );
-
-        let client = Client::builder()
-            .user_agent("Mozilla/5.0 (Tickwise)")
-            .gzip(true)
-            .build()?;
-
-        let res = client.get(&url).send().await?.text().await?;
-        let json: Value = serde_json::from_str(&res)?;
-
-        // chart 結果の基本バリデーション
-        if json.get("chart").is_none() || json["chart"]["error"] != Value::Null {
-            return Err("Yahooからエラーが返されました".into());
-        }
-
-        let result0 = &json["chart"]["result"][0];
-        let timestamps = result0["timestamp"]
-            .as_array()
-            .ok_or("timestamp 取得失敗")?;
-        let q0 = &result0["indicators"]["quote"][0];
-        //let opens = q0["open"].as_array().ok_or("open 取得失敗")?;
-        let highs = q0["high"].as_array().ok_or("high 取得失敗")?;
-        let lows = q0["low"].as_array().ok_or("low 取得失敗")?;
-        let closes = q0["close"].as_array().ok_or("close 取得失敗")?;
-
-        let mut data = Vec::with_capacity(timestamps.len());
-        for i in 0..timestamps.len() {
-            // 欠損をスキップ（nullが混じることがある）
-            let ts = match timestamps[i].as_i64() {
-                Some(v) => v,
-                None => continue,
-            };
-            //let (o, h, l, c) = (
-            let ( h, l, c) = (
-                //opens[i].as_f64(),
-                highs[i].as_f64(),
-                lows[i].as_f64(),
-                closes[i].as_f64(),
-            );
-            //if let (Some(o), Some(h), Some(l), Some(c)) = (o, h, l, c) {
-            if let ( Some(h), Some(l), Some(c)) = ( h, l, c) {
-
-                let date = Utc
-                    .timestamp_opt(ts, 0)
-                    .single()
-                    .ok_or("timestamp を日時に変換できません")?
-                    .date_naive()
-                    .to_string();
-                data.push(MarketData {
-                    date,
-                    //open: o,
-                    high: h,
-                    low: l,
-                    close: c,
-                    name: None,
-                });
-            }
-        }
-        return Ok(data);
-    }
-
-    // ───────── 日本株以外：MarketStack ─────────
-    if !config.silent{
-        eprintln!("🌎 MarketStack APIを使用します");
-    }
     let url = format!(
-        "https://api.marketstack.com/v1/eod?access_key={}&symbols={}&limit=30",
-        marketstack_key,
-        urlencoding::encode(t_raw)
+        "https://query2.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=3mo",
+        urlencoding::encode(&ysym)
     );
 
-    let response = reqwest::get(&url).await?.text().await?;
-    let json: Value = serde_json::from_str(&response)?;
+    let client = Client::builder()
+        .user_agent("Mozilla/5.0 (Tickwise)")
+        .gzip(true)
+        .brotli(true)
+        .build()?;
 
-    if let Some(error) = json.get("error") {
-        if error["code"] == "usage_limit_reached" {
-            return Err("MarketStack APIの月間使用制限を超えました。有料プランの検討か、リクエスト頻度の削減が必要です。".into());
-        }
-        return Err(format!("MarketStackエラー: {}", error).into());
+    let text = client
+        .get(&url)
+        .header("accept", "application/json")
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let json: Value = serde_json::from_str(&text)?;
+    if json.get("chart").is_none() || !json["chart"]["error"].is_null() {
+        return Err("❌ Yahoo /v8 chart からの取得に失敗しました。".into());
     }
 
-    let array = json["data"]
+    let result = json["chart"]["result"]
         .as_array()
-        .ok_or("MarketStack: data配列が見つかりません")?;
-    if array.is_empty() {
-        return Err("MarketStackからデータが取得できませんでした。".into());
+        .ok_or("❌ chart.result 配列なし")?;
+    if result.is_empty() {
+        return Err("❌ chart.result が空です。".into());
     }
 
-    // 先頭要素で最低限の妥当性チェック
-    if let Some(first) = array.get(0) {
-        let close = first
-            .get("close")
-            .and_then(|v| v.as_f64())
-            .ok_or("close欠損")?;
-        let date = first
-            .get("date")
-            .and_then(|v| v.as_str())
-            .ok_or("date欠損")?;
-        let sym = first
-            .get("symbol")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default();
-        if close == 0.0 || date.is_empty() || sym.to_ascii_uppercase() != t_raw.to_ascii_uppercase()
-        {
-            return Err("MarketStack: 無効データ（symbol/close/dateの不一致）".into());
+    let r0 = &result[0];
+    let timestamps = r0["timestamp"]
+        .as_array()
+        .ok_or("❌ timestamp がありません。")?;
+    let q0 = &r0["indicators"]["quote"][0];
+    let highs = q0["high"].as_array().ok_or("❌ high がありません。")?;
+    let lows = q0["low"].as_array().ok_or("❌ low がありません。")?;
+    let closes = q0["close"].as_array().ok_or("❌ close がありません。")?;
+
+    let n = timestamps
+        .len()
+        .min(highs.len())
+        .min(lows.len())
+        .min(closes.len());
+    let mut out: Vec<MarketData> = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let ts = match timestamps[i].as_i64() {
+            Some(v) => v,
+            None => continue,
+        };
+        let (h, l, c) = (highs[i].as_f64(), lows[i].as_f64(), closes[i].as_f64());
+        if let (Some(h), Some(l), Some(c)) = (h, l, c) {
+            let date = chrono::Utc
+                .timestamp_opt(ts, 0)
+                .single()
+                .ok_or("❌ timestamp 変換失敗")?
+                .date_naive()
+                .to_string();
+            out.push(MarketData {
+                date,
+                high: h,
+                low: l,
+                close: c,
+                name: None,
+            });
         }
     }
 
-    // name は itemに無いことが多いので最初の要素からあれば流用
-    let mut name: Option<String> = None;
-    if let Some(first) = array.get(0) {
-        if let Some(nv) = first.get("name").and_then(|v| v.as_str()) {
-            name = Some(nv.to_string());
-        }
+    if out.len() < 2 {
+        return Err("❌ 時系列データが2件未満のため、テクニカル指標を構築できません。".into());
     }
 
-    let mut out = Vec::with_capacity(array.len());
-    for item in array {
-        let mut md: MarketData = serde_json::from_value(item.clone())?;
-        if md.name.is_none() {
-            md.name = name.clone();
-        }
-        out.push(md);
-    }
     Ok(out)
-}
-
-/// 分析結果の表示
-async fn fetch_company_name(
-    ticker: &str,
-    api_key: &str,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    let url = format!(
-        "https://api.marketstack.com/v1/tickers/{}?access_key={}",
-        ticker, api_key
-    );
-    let res = reqwest::get(&url).await?.text().await?;
-    let json: serde_json::Value = serde_json::from_str(&res)?;
-    let name = json
-        .get("name")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    Ok(name)
 }
 
 /// エイリアスCSVの読み込み
@@ -1603,7 +1471,7 @@ fn build_basic_technical_entry(
     config: &Config,
     data: &[MarketData],
     ticker_name_map: &HashMap<String, String>,
-    fetched_company_name: Option<String>,
+    //fetched_company_name: Option<String>,
 ) -> Result<TechnicalDataGuard, Box<dyn std::error::Error>> {
     // データが2件未満では前日比の評価ができないため中断
     if data.len() < 2 {
@@ -1618,10 +1486,10 @@ fn build_basic_technical_entry(
     let alias_name_opt =
         jp_code_from_ticker(&config.ticker).and_then(|code| ticker_name_map.get(&code).cloned());
 
-    // 優先順位：エイリアス > API名 > LLM取得名 > ティッカー文字列
+    // 優先順位：エイリアス >  LLM取得名 > ティッカー文字列
     let name = alias_name_opt // 4桁JP alias（あるなら最優先）
         .or(latest.name.clone()) // APIから来た会社名
-        .or(fetched_company_name) // 追加取得の会社名
+        //.or(fetched_company_name) // 追加取得の会社名
         .or_else(|| hardcoded.map(|h| h.formal_name.to_string())) // ★ハードコード名
         .unwrap_or_else(|| config.ticker.clone());
 
@@ -1766,8 +1634,7 @@ fn evaluate_all_selected_extensions(
             }
             ExtensionIndicator::Ichimoku => {
                 evaluate_and_store_ichimoku(data, guard)?;
-            }
-         //   _ => {}
+            } //   _ => {}
         }
     }
 
@@ -1852,11 +1719,11 @@ fn evaluate_and_store_sma(
     let diff = short - long;
 
     let sma_score: f64 = match diff {
-        d if d > 2.0 => 2.0,               // 強いゴールデンクロス
-        d if d > 0.5 => 1.0,               // 緩やかな上昇
-        d if d >= -0.5 && d <= 0.5 => 0.0, // 同値圏（絶対値0.5以下）
-        d if d < -2.0 => -2.0,             // 強いデッドクロス
-        _ => -1.0,                         // 緩やかな下降
+        d if d > 2.0 => 2.0,                   // 強いゴールデンクロス
+        d if d > 0.5 => 1.0,                   // 緩やかな上昇
+        d if (-0.5..=0.5).contains(&d) => 0.0, // 同値圏（絶対値0.5以下）
+        d if d < -2.0 => -2.0,                 // 強いデッドクロス
+        _ => -1.0,                             // 緩やかな下降
     };
 
     guard.set_sma_score(sma_score);
@@ -1972,7 +1839,7 @@ fn evaluate_and_store_stochastics(
 
     for i in 0..data.len() {
         closes.push(data[i].close);
-        let start = if i + 1 >= period { i + 1 - period } else { 0 };
+        let start = (i + 1).saturating_sub(period);
         let high = data[start..=i]
             .iter()
             .map(|d| d.high)
@@ -2257,7 +2124,6 @@ fn select_output_target(
         match indicator {
             ExtensionIndicator::Ema => {
                 let ema_score_value = guard.get_ema_score().unwrap_or(0.0);
-              //  let ema_weight_value = config.weight_ema;
                 results.push(AnalysisResult {
                     indicator_name: "EMA".to_string(),
                     description: Vec::new(),
@@ -2266,7 +2132,6 @@ fn select_output_target(
             }
             ExtensionIndicator::Sma => {
                 let sma_score_value = guard.get_sma_score().unwrap_or(0.0);
-                //let sma_weight_value = config.weight_sma;
                 results.push(AnalysisResult {
                     indicator_name: "SMA".to_string(),
                     description: Vec::new(),
@@ -2275,7 +2140,6 @@ fn select_output_target(
             }
             ExtensionIndicator::Roc => {
                 let roc_score_value = guard.get_roc_score().unwrap_or(0.0);
-                //let roc_weight_value = config.weight_roc;
                 results.push(AnalysisResult {
                     indicator_name: "ROC".to_string(),
                     description: Vec::new(),
@@ -2284,7 +2148,6 @@ fn select_output_target(
             }
             ExtensionIndicator::Adx => {
                 let adx_score_value = guard.get_adx_score().unwrap_or(0.0);
-                //let adx_weight_value = config.weight_adx;
                 results.push(AnalysisResult {
                     indicator_name: "ADX".to_string(),
                     description: Vec::new(),
@@ -2293,7 +2156,6 @@ fn select_output_target(
             }
             ExtensionIndicator::Stochastics => {
                 let stoch_score_value = guard.get_stochastics_score().unwrap_or(0.0);
-                //let stoch_weight_value = config.weight_stochastics;
                 results.push(AnalysisResult {
                     indicator_name: "Stochastics".to_string(),
                     description: Vec::new(),
@@ -2302,7 +2164,6 @@ fn select_output_target(
             }
             ExtensionIndicator::Bollinger => {
                 let bollinger_score_value = guard.get_bollinger_score().unwrap_or(0.0);
-                //let bollinger_weight_value = config.weight_bollinger;
                 results.push(AnalysisResult {
                     indicator_name: "Bollinger".to_string(),
                     description: Vec::new(),
@@ -2311,7 +2172,6 @@ fn select_output_target(
             }
             ExtensionIndicator::Fibonacci => {
                 let fibonacci_score_value = guard.get_fibonacci_score().unwrap_or(0.0);
-                //let fibonacci_weight_value = config.weight_fibonacci;
                 results.push(AnalysisResult {
                     indicator_name: "Fibonacci".to_string(),
                     description: Vec::new(),
@@ -2320,21 +2180,19 @@ fn select_output_target(
             }
             ExtensionIndicator::Vwap => {
                 let vwap_score_value = guard.get_vwap_score().unwrap_or(0.0);
-                //let vwap_weight_value = config.weight_vwap;
                 results.push(AnalysisResult {
                     indicator_name: "VWAP".to_string(),
                     description: Vec::new(),
                     score: vwap_score_value,
-               });
+                });
             }
             ExtensionIndicator::Ichimoku => {
                 let ichimoku_score_value = guard.get_ichimoku_score().unwrap_or(0.0);
-                //let ichimoku_weight_value = config.weight_ichimoku;
                 results.push(AnalysisResult {
                     indicator_name: "Ichimoku".to_string(),
                     description: Vec::new(),
                     score: ichimoku_score_value,
-                 });
+                });
             }
         }
     }
@@ -2551,10 +2409,14 @@ fn display_main_info(config: &Config, guard: &TechnicalDataGuard) {
             .red()
         );
     }
+    //  ── JST 現在日時を取得,基本情報表示 ──
+    let now = Local::now();
+    let date_jst = now.format("%Y-%m-%d").to_string();
+    let time_jst = now.format("%H:%M").to_string();
 
     println!("\n📊 銘柄: {}（{}）", guard.get_name(), guard.get_ticker());
-    println!("📅 日付: {}", guard.get_date());
-    println!("💰 終値: {:.2}", guard.get_close());
+    println!("📅 日時: {} {} JST", date_jst, time_jst);
+    println!("💰 現在値　: {:.2}", guard.get_close());
     println!("💰 前日終値: {:.2}", guard.get_previous_close());
 
     let diff = guard.get_price_diff();
@@ -2705,7 +2567,6 @@ fn render_basic(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
 }
 /// AnalysisResultを受け取り、内容を画面に出力する関数
 fn display_analysis_result(result: &AnalysisResult) {
-    //println!("📉 【{}】", result.indicator_name);
     for line in &result.description {
         println!("{}", line);
     }
@@ -2742,7 +2603,6 @@ fn compose_final_score_lines_stance(
     lines.push(format!(
         "🧮 総合スコア: {s:.1} ({w:.1}〜-{w:.1})の範囲",
         s = snap.total_score,
-        //w = snap.total_weight
         w = if snap.total_weight.is_finite() {
             snap.total_weight.abs()
         } else {
@@ -2777,8 +2637,8 @@ fn compose_final_score_lines_stance(
             let seller_percent: u8 = 100u8.saturating_sub(buyer_percent);
 
             // 5段階のラベル＋色（🟢🟡⚪️🟠🔴）をスタンス別に割当
-            let (percent, mark, action_text) = match stance {
-                &Stance::Buyer => {
+            let (percent, mark, action_text) = match *stance {
+                Stance::Buyer => {
                     let p = buyer_percent;
                     let (m, t) = if p >= 90 {
                         ("🟢", "積極的に買う")
@@ -2786,7 +2646,7 @@ fn compose_final_score_lines_stance(
                         ("🟡", "買う")
                     }
                     // 61–89 を「買う」
-                    else if p >= 40 && p <= 60 {
+                    else if (40..=60).contains(&p) {
                         ("⚪️", "中立")
                     }
                     // 40–60 を厳密に中立
@@ -2797,7 +2657,7 @@ fn compose_final_score_lines_stance(
                     };
                     (p, m, t)
                 }
-                &Stance::Seller => {
+                Stance::Seller => {
                     let p = seller_percent;
                     let (m, t) = if p >= 90 {
                         ("🟢", "積極的に売る")
@@ -2805,7 +2665,7 @@ fn compose_final_score_lines_stance(
                         ("🟡", "売る")
                     }
                     // 61–89 を「売る」
-                    else if p >= 40 && p <= 60 {
+                    else if (40..=60).contains(&p) {
                         ("⚪️", "中立")
                     }
                     // 40–60 を厳密に中立
@@ -2914,11 +2774,10 @@ fn render_ema(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
         indicator_name: "EMA".to_string(),
         description: description_lines,
         score: base_score as f64,
-   }
+    }
 }
 
 /// SMA（単純移動平均）の表示（セキュアアクセス：TechnicalDataGuard経由）
-
 fn render_sma(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
     let short = guard.get_sma_short();
     let long = guard.get_sma_long();
@@ -2951,7 +2810,7 @@ fn render_sma(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "SMA".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-           }
+            }
         }
         None => {
             description_lines.push("⚠️ SMAスコア情報なし".to_string());
@@ -2975,7 +2834,6 @@ fn rank_sma_score(sma_score: Option<i32>) -> &'static str {
     }
 }
 /// ADXの表示（セキュアアクセス: TechnicalDataGuard経由）
-
 /// ADXスコアのランク評価（スコア → ラベル文字列）
 fn rank_adx_score(adx_score: Option<i32>) -> &'static str {
     match adx_score {
@@ -3029,7 +2887,7 @@ fn render_adx(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                         indicator_name: "ADX".to_string(),
                         description: description_lines,
                         score: 0.0,
-                   }
+                    }
                 }
             }
         }
@@ -3039,13 +2897,12 @@ fn render_adx(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "ADX".to_string(),
                 description: description_lines,
                 score: 0.0,
-           }
+            }
         }
     }
 }
 
-//// ROC（変化率）の表示（セキュアアクセス：TechnicalDataGuard経由）
-
+/// ROC（変化率）の表示（セキュアアクセス：TechnicalDataGuard経由）
 fn rank_roc_score(roc_score: Option<i32>) -> &'static str {
     match roc_score {
         Some(2) => "🟢 ROCが大幅上昇 → 強い上昇トレンド → スコア+2加点",
@@ -3098,7 +2955,7 @@ fn render_roc(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                         indicator_name: "ROC".to_string(),
                         description: description_lines,
                         score: 0.0,
-                   }
+                    }
                 }
             }
         }
@@ -3114,7 +2971,6 @@ fn render_roc(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
 }
 
 /// ストキャスティクスの表示（セキュアアクセス：TechnicalDataGuard経由）
-
 /// ストキャスティクススコアの判定文字列
 fn rank_stochastics_score(stochastics_score: Option<i32>) -> &'static str {
     match stochastics_score {
@@ -3160,7 +3016,7 @@ fn render_stochastics(config: &Config, guard: &TechnicalDataGuard) -> AnalysisRe
                 indicator_name: "ストキャスティクス".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-           }
+            }
         }
         None => {
             description_lines.push("⚠️ ストキャスティクススコア情報なし".to_string());
@@ -3168,7 +3024,7 @@ fn render_stochastics(config: &Config, guard: &TechnicalDataGuard) -> AnalysisRe
                 indicator_name: "ストキャスティクス".to_string(),
                 description: description_lines,
                 score: 0.0,
-          }
+            }
         }
     }
 }
@@ -3316,7 +3172,7 @@ fn render_fibonacci(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
     match guard.get_fibonacci_score().map(|v| v as i32) {
         Some(base_score) => {
             let adjusted_score = base_score as f64 * weight;
-           
+
             description_lines.push(format!(
                 "📝 スコア調整値({:.1}) = スコア({}) × Weight({:.1})",
                 adjusted_score, base_score, weight
@@ -3325,7 +3181,7 @@ fn render_fibonacci(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
                 indicator_name: "フィボナッチ".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-           }
+            }
         }
         None => {
             description_lines.push("⚠️ フィボナッチスコア情報なし".to_string());
@@ -3333,7 +3189,7 @@ fn render_fibonacci(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResu
                 indicator_name: "フィボナッチ".to_string(),
                 description: description_lines,
                 score: 0.0,
-           }
+            }
         }
     }
 }
@@ -3375,7 +3231,7 @@ fn render_vwap(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "VWAP".to_string(),
                 description: description_lines,
                 score: base_score as f64,
-           }
+            }
         }
         None => {
             description_lines.push("⚠️ VWAPスコア情報なし".to_string());
@@ -3383,13 +3239,12 @@ fn render_vwap(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
                 indicator_name: "VWAP".to_string(),
                 description: description_lines,
                 score: 0.0,
-           }
+            }
         }
     }
 }
 
 /// 一目均衡表の転換線・基準線・スコアを表示（セキュアアクセス：TechnicalDataGuard経由）
-
 fn rank_ichimoku_score(ichimoku_score: Option<i32>) -> &'static str {
     match ichimoku_score {
         Some(2) => "🟢 転換線が基準線より大幅に上 → 強い買い圧力 → スコア+2加点",
@@ -3458,7 +3313,7 @@ fn render_ichimoku(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResul
         }
     }
 }
-
+/// 単極ゲージ（Seller/Buyerの見た目長さ差を解消）。例: 「Buyer [.....█████] Seller」
 fn render_unipolar_gauge_rtl(
     percent: u8,
     left_label: &str,
@@ -3481,6 +3336,7 @@ fn render_unipolar_gauge_rtl(
 
 /// 両極ゲージ（中央'|'、正は左へ・負は右へ塗る）。例: 「買い [█████|..........] 売り」
 /// 幅は呼び出し側で 50 指定（ここでは安全側で最小12を確保）。中央'|'を配置。
+#[allow(clippy::needless_range_loop)]
 fn render_bipolar_gauge_lr(score_ratio: f64, width: usize) -> String {
     // 幅は呼び出し側で 50 指定（ここでは安全側で最小12を確保）。中央'|'を配置。
     let w = width.max(12);
@@ -3540,7 +3396,6 @@ fn stance_caption(s: &Stance) -> &'static str {
         Stance::Seller => "Seller",
     }
 }
-
 ///グラフ色分け
 fn get_color_for_score(score_ratio: f64) -> &'static str {
     match score_ratio {
@@ -3625,7 +3480,7 @@ fn save_technical_log(
     match config.log_format.to_lowercase().as_str() {
         "csv" => {
             if config.stdout_log {
-                let row = generate_technical_csv_row( guard, results, &snap)?;
+                let row = generate_technical_csv_row(guard, results, &snap)?;
                 println!("{}", row);
                 return Ok(());
             }
@@ -3641,10 +3496,9 @@ fn save_technical_log(
                 .create(true)
                 .append(config.data_append)
                 .write(true)
-                .open(&dir_path.join(format!("{}.csv", guard.get_ticker())))?;
+                .open(dir_path.join(format!("{}.csv", guard.get_ticker())))?;
             let mut writer = BufWriter::new(file);
-
-            let row = generate_technical_csv_row( guard, results, &snap)?;
+            let row = generate_technical_csv_row(guard, results, &snap)?;
             writeln!(writer, "{}", row)?;
             Ok(())
         }
@@ -3655,7 +3509,6 @@ fn save_technical_log(
 
 // ② CSV行生成：final_score はスナップショットから（再計算しない）
 fn generate_technical_csv_row(
-    //_config: &Config,
     guard: &TechnicalDataGuard,
     results: &[AnalysisResult],
     snap: &FinalScoreSnapshot, // ← 追加
@@ -3765,7 +3618,7 @@ fn save_technical_log_json(
         .create(true)
         .append(config.data_append)
         .write(true)
-        .open(&dir_path.join(format!("{}.json", guard.get_ticker())))?;
+        .open(dir_path.join(format!("{}.json", guard.get_ticker())))?;
     let mut writer = BufWriter::new(file);
     writeln!(writer, "{}", json_str)?;
     Ok(())
@@ -3853,21 +3706,49 @@ fn generate_technical_json_string(
 struct Article {
     title: String,
     url: String,
-  //  description: String,
+    //  description: String,
     published_at: Option<String>,
 }
 
 // ===== 0) フローコントローラ：取得→整形→(必要なら)出力、同じ行を返す =====
+// ニュースの取得と表示を司る。未設定/失敗は“スキップ明示”で継続する。
+// 取得だけに専念し、整形は compose_news_lines、出力は print_lines_to_terminal に委譲
+
+// --- 修正：収集→整形→出力しつつ、Vec<Article> を返す ---
 async fn news_flow_controller(
     guard: &TechnicalDataGuard,
     config: &Config,
-) -> Result<Vec<String>, Box<dyn Error>> {
-    let articles = run_news_once(guard, config).await.unwrap_or_default();
+) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
+    // Braveキーは Config 経由のみ
+    let brave_key_opt = {
+        let s = config.brave_api_key.as_str();
+        if s.trim().is_empty() {
+            None
+        } else {
+            Some(s)
+        }
+    };
+
+    // 収集（未設定/失敗は空Vec。再収集・追加整形はしない）
+    let articles: Vec<Article> = match brave_key_opt {
+        None => Vec::new(),
+        Some(k) => run_news_once(guard, config, Some(k))
+            .await
+            .unwrap_or_default(), // 失敗時も空Vec
+    };
+
+    // 整形→出力（唯一の生成点＋プリンタ経由）
     let lines = compose_news_lines(guard, config, &articles);
+    // 出力は show_news オプション時のみ
     if config.show_news {
-        print_lines_to_terminal(&lines);
+        let brave_key_missing = config.brave_api_key.trim().is_empty();
+        if brave_key_missing {
+            println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
+        } else {
+            print_lines_to_terminal(&lines);
+        }
     }
-    Ok(lines)
+    Ok(articles)
 }
 
 // ===== 1) 検索ワード加工：ログ用の1行（SoTはここ） =====
@@ -3907,13 +3788,14 @@ fn build_news_query_line_for_log(guard: &TechnicalDataGuard, config: &Config) ->
         fresh = freshness_log
     )
 }
-
 // ===== 2) 取得：Braveから収集→重複除去→日付降順（無音） =====
 async fn run_news_once(
     guard: &TechnicalDataGuard,
     config: &Config,
-) -> Result<Vec<Article>, Box<dyn Error>> {
+    brave_key: Option<&str>, // 変更点：キーは Option で受ける
+) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
     let (country, search_lang, ui_lang) = news_locale_for_ticker(guard.get_ticker());
+
     let query_string = if let Some(ref custom) = config.custom_news_query {
         custom.clone()
     } else if country == "JP" {
@@ -3938,10 +3820,12 @@ async fn run_news_once(
     };
 
     let mut articles: Vec<Article> = Vec::new();
-    if let Some(api_key) = get_brave_api_key() {
+
+    // キー未設定(None)のときは“無音で空”を返す（呼び出し側で「スキップ」と表示）
+    if let Some(api_key) = brave_key {
         if let Ok(fetched) = fetch_articles_from_brave(
             &query_string,
-            &api_key,
+            api_key,
             country,
             search_lang,
             ui_lang,
@@ -4060,11 +3944,6 @@ fn news_locale_for_ticker(ticker: &str) -> (&'static str, &'static str, &'static
     }
 }
 
-// Brave APIキー（未設定なら None）
-fn get_brave_api_key() -> Option<String> {
-    std::env::var("BRAVE_API_KEY").ok()
-}
-
 // Brave News API 呼び出し（count/freshness は引数で制御）
 async fn fetch_articles_from_brave(
     query_string: &str,
@@ -4127,7 +4006,6 @@ async fn fetch_articles_from_brave(
             out.push(Article {
                 title,
                 url,
-                //description,
                 published_at,
             });
         }
@@ -4151,15 +4029,19 @@ fn normalize_url(url_str: &str) -> String {
 async fn llm_flow_controller(
     config: &Config,
     guard: &TechnicalDataGuard,
+    news_articles: Option<&[Article]>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let lines = compose_llm_prompt_lines(config, guard).await?;
+    let lines = compose_llm_prompt_lines(config, guard, news_articles).await?;
     let prompt = lines.join("\n");
 
     if config.debug_prompt {
         // 保存は送信有無に関係なく実行
         save_prompt_to_file(&prompt)?;
     }
-    
+    if config.silent {
+        return Ok(()); // 送信スキップ
+    }
+
     match config.llm_provider.as_str() {
         "openai" => openai_send_prompt(config, &prompt).await?,
         "gemini" => return Err("Gemini provider is not implemented yet.".into()),
@@ -4169,14 +4051,14 @@ async fn llm_flow_controller(
     Ok(())
 }
 
-// --- LLM向けプロンプト行を唯一生成（SoT/DRY、ゲージ無し） ---
+/// --- LLM向けプロンプト行を唯一生成（SoT/DRY、ゲージ無し） ---
 async fn compose_llm_prompt_lines(
     config: &Config,
     guard: &TechnicalDataGuard,
+    news_articles: Option<&[Article]>,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut lines = Vec::new();
 
-    // スタンス前置き（Buyer/Seller のときだけ LLM に伝える一文を先頭に付与）
     match &config.stance {
         Stance::Buyer => {
             lines.push(
@@ -4191,16 +4073,14 @@ async fn compose_llm_prompt_lines(
             );
             lines.push(String::new());
         }
-        Stance::Holder => { /* 付与なし（現状どおり） */ }
+        Stance::Holder => {}
     }
 
-    // 設定注意
     if config.macd_minus_ok {
         lines.push("⚠️ MACDがマイナス圏かつシグナルより上回っている場合に、買いシグナルを許容する設定が有効です".to_string());
         lines.push(String::new());
     }
 
-    // メイン情報
     lines.push(format!(
         "📊 銘柄: {}（{}）",
         guard.get_name(),
@@ -4216,12 +4096,10 @@ async fn compose_llm_prompt_lines(
     ));
     lines.push(String::new());
 
-    // 基本テクニカル（既存整形の流用）
     let basic = render_basic(config, guard);
     lines.extend(basic.description.clone());
     lines.push(String::new());
 
-    // 拡張テクニカル（既存整形の流用）
     let ext_results = render_extension(config, guard);
     for item in ext_results {
         if let ExtensionResult::Analysis(res) = item {
@@ -4230,26 +4108,57 @@ async fn compose_llm_prompt_lines(
         }
     }
 
-    // 総合スコア（ゲージ無し・SoT）
     let snap = calculate_final_score_snapshot(config, guard);
-    for line in
-        compose_final_score_lines_stance(&snap, &config.stance, /*include_gauge=*/ true)
-    {
+    for line in compose_final_score_lines_stance(&snap, &config.stance, true) {
         if !line.is_empty() {
             lines.push(line);
         }
     }
     lines.push(String::new());
 
-    // ニュース（端末と同体裁：既存の一意整形関数を再利用）
-    if config.show_news {
-        let articles = run_news_once(guard, config).await.unwrap_or_default();
-        let news_lines = compose_news_lines(guard, config, &articles); // ※既存の関数を利用
-        lines.extend(news_lines);
-        lines.push(String::new());
+    let mut news_task_directive =
+        "対象が0件なら『株価に関係する評価対象ニュースはありません』と 1 行だけ記載。".to_string();
+
+    if !config.no_news {
+        let brave_key_missing = config.brave_api_key.trim().is_empty();
+
+        if brave_key_missing {
+            lines.push("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。".to_string());
+            lines.push(String::new());
+            news_task_directive =
+                "この実行ではニュース検索をスキップ。ニュース節には『ニュース検索をスキップ』と 1 行だけ記載。"
+                    .to_string();
+        } else {
+            match news_articles {
+                None => {
+                    lines.push("【注記】ニュース取得に失敗したためスキップ。".to_string());
+                    lines.push(String::new());
+                    news_task_directive =
+                        "この実行ではニュース取得に失敗しスキップ。ニュース節には『取得失敗によりスキップ』と 1 行だけ記載。"
+                            .to_string();
+                }
+                Some([]) => {
+                    lines.push("【注記】対象期間に該当ニュースなし。".to_string());
+                    lines.push(String::new());
+                }
+                Some(slice) => {
+                    let news_lines = compose_news_lines(guard, config, slice);
+                    lines.extend(news_lines);
+                    lines.push(String::new());
+                    news_task_directive =
+                        "以下の見出し群を、\
+                        Tier A（一次性・数量性・直接性・近接性・信頼性が高い）/ \
+                        Tier B（中）/ Tier C（低＝論評・再掲など）に仕分ける。\
+                        各記事に対し、価格影響度（高/中/低/微小）を判定。\
+                        Tier A/B は必ず列挙し、影響度が『低/微小』でも \
+                        『ニュース価値は高いが価格影響は軽微（理由：金額相対小/反映が遠い/既報の焼き直し等）』と 1 行で明記。\
+                        Tier C は“参考（価格影響なし）”として最大3件まで、非採用理由を 1 語（再掲/論評/一次性なし 等）で添える。\
+                        新規数値の創作は禁止。"
+                            .to_string();
+                }
+            }
+        }
     }
-    // 指示
-    //let fmt = |v: Option<f64>| v.map(|x| format!("{:.2}", x)).unwrap_or("-".to_string());
 
     lines.push("【タスク】".to_string());
     lines.push(format!(
@@ -4264,7 +4173,10 @@ async fn compose_llm_prompt_lines(
         "3. 1ヶ月の中期目線（{}文字以内）",
         config.max_midterm_length
     ));
-    lines.push(format!("4. ニュースハイライト（{}字以内、株価に影響する情報をピックアップ。芸能/スポーツ/宣伝は除外。対象が0件なら「株価に関係する評価対象ニュースはありません」と明記）", config.max_news_length));
+    lines.push(format!(
+        "4. ニュースハイライト（{}字以内、株価に影響する情報のみ。芸能/スポーツ/宣伝は除外。{}）",
+        config.max_news_length, news_task_directive
+    ));
     lines.push(format!("5. 総評（{}字以内）", config.max_review_length));
     lines.push(String::new());
 
@@ -4275,7 +4187,6 @@ async fn compose_llm_prompt_lines(
     );
     lines.push("- レンジ/目安は、提示された水準（終値/EMA/SMA/VWAP/ボリ下限上限/フィボ各値）からのみ導出。".to_string());
     lines.push("- オシレーター用語は厳密に：RSI<30/ストキャス%K<20=売られすぎ、RSI>70/％K>80=買われすぎ。逆転表現は禁止。".to_string());
-    //lines.push("- 「MACDマイナス許容」は該当時のみ言及。該当しない場合は“本件は未適用”と明記。".to_string());
     let macd = guard.get_macd();
     let signal = guard.get_signal();
     let macd_policy = match (config.macd_minus_ok, macd < 0.0 && macd > signal) {
@@ -4284,7 +4195,6 @@ async fn compose_llm_prompt_lines(
         (false, _) => "※『MACDマイナス許容』設定: 無効",
     };
     lines.push(macd_policy.to_string());
-
     lines.push(
         "- ニュース0件時は“テクニカル主導”と明記。件数>0なら冒頭に要点の箇条書きから入る。"
             .to_string(),
@@ -4298,7 +4208,6 @@ async fn compose_llm_prompt_lines(
     lines.push("- 用語は「ボリンジャーバンド下限/上限」で統一（初出のみ正式名。以後は“BB下限/BB上限”略称可）。".to_string());
     lines.push(String::new());
 
-    // 追加ノート
     if let Some(note) = &config.openai_extra_note {
         if !note.trim().is_empty() {
             lines.push(format!("📝 追加ノート: {}", note.trim()));
@@ -4313,8 +4222,12 @@ async fn openai_send_prompt(
     config: &Config,
     prompt: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if config.no_llm { return Ok(()); }
-    if config.llm_provider.trim() != "openai" { return Ok(()); }
+    if config.no_llm {
+        return Ok(());
+    }
+    if config.llm_provider.trim() != "openai" {
+        return Ok(());
+    }
 
     let openai_key = if !config.openai_api_key.trim().is_empty() {
         config.openai_api_key.trim().to_string()
@@ -4348,7 +4261,10 @@ async fn openai_send_prompt(
             401 => eprintln!("❌ 認証エラー(401)。APIキーが不正/期限切れの可能性。"),
             403 => eprintln!("⛔ アクセス拒否(403)。権限不足または機能が無効化。"),
             429 => eprintln!("⏳ レート制限(429)。時間を置いて再実行してください。"),
-            500..=599 => eprintln!("🛠️ 一時的な障害({}).時間を置いて再試行してください。", status),
+            500..=599 => eprintln!(
+                "🛠️ 一時的な障害({}).時間を置いて再試行してください。",
+                status
+            ),
             _ => eprintln!("❌ リクエスト失敗({}): {}", status, body),
         }
         return Err(format!("OpenAI request failed: {}", status).into());
@@ -4364,67 +4280,6 @@ async fn openai_send_prompt(
     Ok(())
 }
 
-//
-/* 
-async fn openai_send_prompt(
-    config: &Config,
-    prompt: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // APIキー取得（引数優先→環境変数）。空文字は未設定扱い。
-    let openai_key = if !config.openai_api_key.trim().is_empty() {
-        config.openai_api_key.trim().to_string()
-    } else {
-        std::env::var("OPENAI_API_KEY").unwrap_or_default()
-    };
-
-    if openai_key.trim().is_empty() {
-        eprintln!("⚠️ OpenAI APIキーが未設定のため送信をスキップしました。");
-        eprintln!("   対応: `--openai-api-key <KEY>` または 環境変数 `OPENAI_API_KEY` を設定してください。");
-        eprintln!("   例: export OPENAI_API_KEY=sk-xxxxxxxx / setx OPENAI_API_KEY sk-xxxxxxxx");
-        return Ok(()); // エラーにしない
-    }
-
-    // リクエスト送信（プロトタイプ準拠）
-    let client = reqwest::Client::new();
-    let res = client
-        .post("https://api.openai.com/v1/chat/completions")
-        .bearer_auth(openai_key)
-        .json(&serde_json::json!({
-            "model": config.openai_model,
-            "messages": [{ "role": "user", "content": prompt }],
-        }))
-        .send()
-        .await?;
-
-    // ステータス別ガイダンス
-    if !res.status().is_success() {
-        let status = res.status();
-        let body = res.text().await.unwrap_or_default();
-        match status.as_u16() {
-            401 => eprintln!(
-                "❌ 認証エラー(401)。APIキーが不正/期限切れの可能性。キーを確認してください。"
-            ),
-            429 => eprintln!("⏳ レート制限(429)。しばらく待って再実行してください。"),
-            500..=599 => eprintln!(
-                "🛠️ 一時的な障害({}).時間を置いて再試行してください。",
-                status
-            ),
-            _ => eprintln!("❌ リクエスト失敗({}): {}", status, body),
-        }
-        return Err(format!("OpenAI request failed: {}", status).into());
-    }
-
-    // 正常系：本文抽出
-    let json: serde_json::Value = res.json().await?;
-    let content = json["choices"][0]["message"]["content"]
-        .as_str()
-        .ok_or("OpenAI APIのレスポンス形式が不正です")?;
-    println!("\n=== LLM Response  by {}===\n", config.openai_model);
-    println!("{}", content); // 出力先は既存仕様に合わせる
-    Ok(())
-}
-*/
-
 // プロンプトを debug_prompt.txt に保存（短い版）
 fn save_prompt_to_file(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs::File;
@@ -4439,24 +4294,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     from_filename("tickwise.env").ok();
 
     // ✅ 初期化（設定・キー・CSVエイリアス）
-    let (config, marketstack_key, ticker, ticker_name_map) = initialize_environment_and_config()?;
+    let (config, ticker, ticker_name_map) = initialize_environment_and_config()?;
 
     // ✅ 株価データ取得
-    let market_data_list = fetch_market_data(&ticker, &marketstack_key,&config).await?;
+    //let market_data_list = fetch_market_data(&ticker, &marketstack_key,&config).await?;
+    let market_data_list = fetch_market_data(&ticker).await?;
+
     let mut sorted_data = market_data_list.clone();
     sorted_data.sort_by(|a, b| a.date.cmp(&b.date));
-
-    // ✅ 企業名の補完（MarketStack API）
-    let fetched_company_name = fetch_company_name(&ticker, &marketstack_key)
-        .await
-        .unwrap_or(None);
 
     // ✅ 基本分析の構造体（セキュア）生成
     let mut guard = build_basic_technical_entry(
         &config,
         &sorted_data,
         &ticker_name_map,
-        fetched_company_name,
+        //fetched_company_name,
     )?;
 
     // ✅ 拡張分析スコアを必要に応じて格納（セキュア）
@@ -4466,15 +4318,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ✅ 画面出力（構造体読み出しのみ）
     select_output_target(&config, &guard)?;
-
-    // ✅ ニュース要約（LLM分析）
-    if !config.no_news &&!config.silent{
-        news_flow_controller(&guard, &config).await?;
-    }
+    // 画面表示＋記事の取得
+    let articles = news_flow_controller(&guard, &config).await?;
 
     // LLM送信
-    if !config.no_llm &&!config.silent{ 
-        llm_flow_controller(&config, &guard).await?;
+    if !config.no_llm {
+        let news_arg: Option<&[Article]> = if config.no_news {
+            None
+        } else {
+            Some(articles.as_slice())
+        };
+        llm_flow_controller(&config, &guard, news_arg).await?;
     }
 
     Ok(())

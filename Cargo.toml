@@ -2,16 +2,19 @@
 name = "tickwise"
 version = "1.0.0"
 edition = "2021"
+authors = ["koz"]
+description = "Stock analysis and news summarization tool using LLMs"
+license = "MIT"
 
 [dependencies]
-reqwest = { version = "0.12.15", features = ["blocking", "json", "gzip"] }
+reqwest = { version = "0.12.15", features = ["blocking", "json", "gzip","brotli","cookies"] }
 tokio = { version = "1.37", features = ["full"] }
 csv = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ta = "0.5.0"
 chrono = "0.4"
-dotenv = "0.15"
+#dotenv = "0.15"
 dotenvy = "0.15"
 clap = { version = "4.3", features = ["derive"] }
 urlencoding = "2.1.2"  # バージョンは最新が入る
@@ -21,8 +24,6 @@ colored = "3.0.0"
 
 native-tls = "0.2.14"
 tempfile = "3"
-
-
 
 
 
