@@ -12,7 +12,7 @@ Tickwise Windows セットアップガイド
 
 tickwise.exe と tickwise.env.sample をダウンロード。
 
-任意のフォルダ（例：C:\Apps\tickwise\）に保存。
+任意のフォルダ（例：C:\Users\<ユーザー名>\Documents\tickwise）に保存。
 
 フォルダ例：
 C:\Users\<ユーザー名>\Documents\tickwise\
@@ -77,7 +77,6 @@ tickwise.env.sample をコピーして tickwise.env にリネーム。
 例：
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
 BRAVE_API_KEY=brv-xxxxxxxxxxxxxxxxxxxx
-TSE_CODES_CSV=C:\Apps\tickwise\tse_codes.csv
 
 保存先は tickwise.exe と同じフォルダ。
 
