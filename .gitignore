@@ -9,6 +9,7 @@
 !/Cargo.lock
 !/rust-toolchain.toml
 !/Makefile
+!/tickwise.env.sample
 
 # allow source
 !/src/
@@ -21,6 +22,7 @@
 !/scripts/**
 !/docs/
 !/docs/**
+!/tickwise-windows-SHA256
 
 # (明示的に無視しておきたい一般項目)
 .DS_Store
