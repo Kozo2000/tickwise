@@ -1,27 +1,27 @@
+use chrono::Local;
+use chrono::TimeZone;
 use clap::Parser;
-use dotenvy::from_filename;
-use dotenvy::from_path;
-use std::fs::{create_dir_all, OpenOptions};
 use colored::*;
 use csv::ReaderBuilder;
+use dotenvy::from_filename;
+use dotenvy::from_path;
 use reqwest::Client;
 use serde::Deserialize;
-use serde_json;
 use serde_json::json;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs::read_to_string;
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::Cursor;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use ta::indicators::{BollingerBands, MovingAverageConvergenceDivergence, RelativeStrengthIndex};
 use ta::Next;
-use chrono::TimeZone;
-use chrono::Local; 
 use tempfile::NamedTempFile; // JSON用
 
+type BuildCfgResult = Result<(Config, String, HashMap<String, String>), Box<dyn std::error::Error>>;
 const EMA_EQ_EPS: f64 = 0.01; // 短期-長期の絶対差が±0.01未満なら「同値圏」
                               //const NEUTRAL_DEADBAND: f64 = 0.05; // 中立の揺れ幅（±5% 未満なら見送り/様子見）
 
@@ -868,10 +868,9 @@ fn resolve_hardcoded_info(ticker: &str) -> Option<HardcodedInfo> {
     }
 }
 
-fn initialize_environment_and_config(
-) -> Result<(Config, String, HashMap<String, String>), Box<dyn std::error::Error>> {
+fn initialize_environment_and_config() -> BuildCfgResult {
+    // ✅ 環境変数の読み込み（tickwise.env ファイル）
     let env_path = Path::new("tickwise.env");
-
     if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
         if let Ok(mut tmpfile) = NamedTempFile::new() {
             let content = lines.join("\n");
@@ -944,7 +943,7 @@ fn initialize_environment_and_config(
         None => HashMap::new(),
     };
     // 例: if let Some(code) = jp_code_from_ticker(&ticker) { ticker_name_map.insert(code, hardcoded.formal_name.to_string()); }
-    // ハードコードされたティッカー名とクエリを追加 
+    // ハードコードされたティッカー名とクエリを追加
     Ok((config, ticker, ticker_name_map))
 }
 
@@ -1142,7 +1141,7 @@ fn build_config(args: &Args) -> Config {
             } else {
                 env::var("OPENAI_API_KEY").ok().unwrap_or_default()
             }
-        },        
+        },
         brave_api_key: {
             if let Some(k) = &args.brave_api_key {
                 k.clone()
@@ -1282,7 +1281,7 @@ fn get_f64_from_args_or_env(arg_val: f64, env_key: &str, default: f64) -> f64 {
         return default;
     }
 
-    if value < 0.5 || value > 3.0 {
+    if !(0.5..=3.0).contains(&value) {
         eprintln!(
             "⚠️ 無効なweight値 (範囲外): {}。デフォルト値({})を使用します。",
             value, default
@@ -1348,11 +1347,10 @@ fn jp_code_from_ticker(t: &str) -> Option<String> {
         return (code.len() == 4 && code.chars().all(|c| c.is_ascii_digit()))
             .then(|| code.to_string());
     }
-    (up.len() == 4 && up.chars().all(|c| c.is_ascii_digit())).then(|| up)
+    (up.len() == 4 && up.chars().all(|c| c.is_ascii_digit())).then_some(up)
 }
 /// Yahoo Finance から市場データを取得する
 /// Yahoo v8/chart: use only meta.chartPreviousClose, meta.currency, indicators.quote[0].(o/h/l/c), timestamp. Do NOT use previousClose/regularMarket*/adjclose.
-
 async fn fetch_market_data(
     ticker: &str,
     //config: &Config,
@@ -1395,17 +1393,26 @@ async fn fetch_market_data(
     }
 
     let r0 = &result[0];
-    let timestamps = r0["timestamp"].as_array().ok_or("❌ timestamp がありません。")?;
+    let timestamps = r0["timestamp"]
+        .as_array()
+        .ok_or("❌ timestamp がありません。")?;
     let q0 = &r0["indicators"]["quote"][0];
-    let highs  = q0["high"].as_array().ok_or("❌ high がありません。")?;
-    let lows   = q0["low"].as_array().ok_or("❌ low がありません。")?;
+    let highs = q0["high"].as_array().ok_or("❌ high がありません。")?;
+    let lows = q0["low"].as_array().ok_or("❌ low がありません。")?;
     let closes = q0["close"].as_array().ok_or("❌ close がありません。")?;
 
-    let n = timestamps.len().min(highs.len()).min(lows.len()).min(closes.len());
+    let n = timestamps
+        .len()
+        .min(highs.len())
+        .min(lows.len())
+        .min(closes.len());
     let mut out: Vec<MarketData> = Vec::with_capacity(n);
 
     for i in 0..n {
-        let ts = match timestamps[i].as_i64() { Some(v) => v, None => continue };
+        let ts = match timestamps[i].as_i64() {
+            Some(v) => v,
+            None => continue,
+        };
         let (h, l, c) = (highs[i].as_f64(), lows[i].as_f64(), closes[i].as_f64());
         if let (Some(h), Some(l), Some(c)) = (h, l, c) {
             let date = chrono::Utc
@@ -1414,7 +1421,13 @@ async fn fetch_market_data(
                 .ok_or("❌ timestamp 変換失敗")?
                 .date_naive()
                 .to_string();
-            out.push(MarketData { date, high: h, low: l, close: c, name: None });
+            out.push(MarketData {
+                date,
+                high: h,
+                low: l,
+                close: c,
+                name: None,
+            });
         }
     }
 
@@ -1706,11 +1719,11 @@ fn evaluate_and_store_sma(
     let diff = short - long;
 
     let sma_score: f64 = match diff {
-        d if d > 2.0 => 2.0,               // 強いゴールデンクロス
-        d if d > 0.5 => 1.0,               // 緩やかな上昇
-        d if d >= -0.5 && d <= 0.5 => 0.0, // 同値圏（絶対値0.5以下）
-        d if d < -2.0 => -2.0,             // 強いデッドクロス
-        _ => -1.0,                              // 緩やかな下降
+        d if d > 2.0 => 2.0,                   // 強いゴールデンクロス
+        d if d > 0.5 => 1.0,                   // 緩やかな上昇
+        d if (-0.5..=0.5).contains(&d) => 0.0, // 同値圏（絶対値0.5以下）
+        d if d < -2.0 => -2.0,                 // 強いデッドクロス
+        _ => -1.0,                             // 緩やかな下降
     };
 
     guard.set_sma_score(sma_score);
@@ -1826,7 +1839,7 @@ fn evaluate_and_store_stochastics(
 
     for i in 0..data.len() {
         closes.push(data[i].close);
-        let start = if i + 1 >= period { i + 1 - period } else { 0 };
+        let start = (i + 1).saturating_sub(period);
         let high = data[start..=i]
             .iter()
             .map(|d| d.high)
@@ -2400,10 +2413,10 @@ fn display_main_info(config: &Config, guard: &TechnicalDataGuard) {
     let now = Local::now();
     let date_jst = now.format("%Y-%m-%d").to_string();
     let time_jst = now.format("%H:%M").to_string();
-   
+
     println!("\n📊 銘柄: {}（{}）", guard.get_name(), guard.get_ticker());
-    println!("📅 日時: {} {} JST", date_jst,time_jst);
-    println!("💰 現在値　: {:.2}",guard.get_close());
+    println!("📅 日時: {} {} JST", date_jst, time_jst);
+    println!("💰 現在値　: {:.2}", guard.get_close());
     println!("💰 前日終値: {:.2}", guard.get_previous_close());
 
     let diff = guard.get_price_diff();
@@ -2624,8 +2637,8 @@ fn compose_final_score_lines_stance(
             let seller_percent: u8 = 100u8.saturating_sub(buyer_percent);
 
             // 5段階のラベル＋色（🟢🟡⚪️🟠🔴）をスタンス別に割当
-            let (percent, mark, action_text) = match stance {
-                &Stance::Buyer => {
+            let (percent, mark, action_text) = match *stance {
+                Stance::Buyer => {
                     let p = buyer_percent;
                     let (m, t) = if p >= 90 {
                         ("🟢", "積極的に買う")
@@ -2633,7 +2646,7 @@ fn compose_final_score_lines_stance(
                         ("🟡", "買う")
                     }
                     // 61–89 を「買う」
-                    else if p >= 40 && p <= 60 {
+                    else if (40..=60).contains(&p) {
                         ("⚪️", "中立")
                     }
                     // 40–60 を厳密に中立
@@ -2644,7 +2657,7 @@ fn compose_final_score_lines_stance(
                     };
                     (p, m, t)
                 }
-                &Stance::Seller => {
+                Stance::Seller => {
                     let p = seller_percent;
                     let (m, t) = if p >= 90 {
                         ("🟢", "積極的に売る")
@@ -2652,7 +2665,7 @@ fn compose_final_score_lines_stance(
                         ("🟡", "売る")
                     }
                     // 61–89 を「売る」
-                    else if p >= 40 && p <= 60 {
+                    else if (40..=60).contains(&p) {
                         ("⚪️", "中立")
                     }
                     // 40–60 を厳密に中立
@@ -2821,7 +2834,6 @@ fn rank_sma_score(sma_score: Option<i32>) -> &'static str {
     }
 }
 /// ADXの表示（セキュアアクセス: TechnicalDataGuard経由）
-
 /// ADXスコアのランク評価（スコア → ラベル文字列）
 fn rank_adx_score(adx_score: Option<i32>) -> &'static str {
     match adx_score {
@@ -2890,7 +2902,7 @@ fn render_adx(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
     }
 }
 
-//// ROC（変化率）の表示（セキュアアクセス：TechnicalDataGuard経由）
+/// ROC（変化率）の表示（セキュアアクセス：TechnicalDataGuard経由）
 fn rank_roc_score(roc_score: Option<i32>) -> &'static str {
     match roc_score {
         Some(2) => "🟢 ROCが大幅上昇 → 強い上昇トレンド → スコア+2加点",
@@ -2959,7 +2971,6 @@ fn render_roc(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
 }
 
 /// ストキャスティクスの表示（セキュアアクセス：TechnicalDataGuard経由）
-
 /// ストキャスティクススコアの判定文字列
 fn rank_stochastics_score(stochastics_score: Option<i32>) -> &'static str {
     match stochastics_score {
@@ -3302,7 +3313,7 @@ fn render_ichimoku(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResul
         }
     }
 }
-//// 単極ゲージ（Seller/Buyerの見た目長さ差を解消）。例: 「Buyer [.....█████] Seller」
+/// 単極ゲージ（Seller/Buyerの見た目長さ差を解消）。例: 「Buyer [.....█████] Seller」
 fn render_unipolar_gauge_rtl(
     percent: u8,
     left_label: &str,
@@ -3325,6 +3336,7 @@ fn render_unipolar_gauge_rtl(
 
 /// 両極ゲージ（中央'|'、正は左へ・負は右へ塗る）。例: 「買い [█████|..........] 売り」
 /// 幅は呼び出し側で 50 指定（ここでは安全側で最小12を確保）。中央'|'を配置。
+#[allow(clippy::needless_range_loop)]
 fn render_bipolar_gauge_lr(score_ratio: f64, width: usize) -> String {
     // 幅は呼び出し側で 50 指定（ここでは安全側で最小12を確保）。中央'|'を配置。
     let w = width.max(12);
@@ -3484,9 +3496,8 @@ fn save_technical_log(
                 .create(true)
                 .append(config.data_append)
                 .write(true)
-                .open(&dir_path.join(format!("{}.csv", guard.get_ticker())))?;
+                .open(dir_path.join(format!("{}.csv", guard.get_ticker())))?;
             let mut writer = BufWriter::new(file);
-
             let row = generate_technical_csv_row(guard, results, &snap)?;
             writeln!(writer, "{}", row)?;
             Ok(())
@@ -3607,7 +3618,7 @@ fn save_technical_log_json(
         .create(true)
         .append(config.data_append)
         .write(true)
-        .open(&dir_path.join(format!("{}.json", guard.get_ticker())))?;
+        .open(dir_path.join(format!("{}.json", guard.get_ticker())))?;
     let mut writer = BufWriter::new(file);
     writeln!(writer, "{}", json_str)?;
     Ok(())
@@ -3721,10 +3732,9 @@ async fn news_flow_controller(
     // 収集（未設定/失敗は空Vec。再収集・追加整形はしない）
     let articles: Vec<Article> = match brave_key_opt {
         None => Vec::new(),
-        Some(k) => match run_news_once(guard, config, Some(k)).await {
-            Ok(v) => v,            // 取得件数の上限は fetch 側で count=config.news_count を使用
-            Err(_e) => Vec::new(), // 失敗時も空Vec
-        },
+        Some(k) => run_news_once(guard, config, Some(k))
+            .await
+            .unwrap_or_default(), // 失敗時も空Vec
     };
 
     // 整形→出力（唯一の生成点＋プリンタ経由）
@@ -3734,8 +3744,8 @@ async fn news_flow_controller(
         let brave_key_missing = config.brave_api_key.trim().is_empty();
         if brave_key_missing {
             println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
-        }else{
-        print_lines_to_terminal(&lines);
+        } else {
+            print_lines_to_terminal(&lines);
         }
     }
     Ok(articles)
@@ -4127,7 +4137,7 @@ async fn compose_llm_prompt_lines(
                         "この実行ではニュース取得に失敗しスキップ。ニュース節には『取得失敗によりスキップ』と 1 行だけ記載。"
                             .to_string();
                 }
-                Some(slice) if slice.is_empty() => {
+                Some([]) => {
                     lines.push("【注記】対象期間に該当ニュースなし。".to_string());
                     lines.push(String::new());
                 }
@@ -4270,7 +4280,6 @@ async fn openai_send_prompt(
     Ok(())
 }
 
-
 // プロンプトを debug_prompt.txt に保存（短い版）
 fn save_prompt_to_file(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs::File;
@@ -4313,7 +4322,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let articles = news_flow_controller(&guard, &config).await?;
 
     // LLM送信
-    if !config.no_llm  {
+    if !config.no_llm {
         let news_arg: Option<&[Article]> = if config.no_news {
             None
         } else {
