@@ -115,9 +115,7 @@ API有効で起動：
 62C05ED9B23580BE24081C1D03540621B277DC18BBCC0CCB843FFE0B0920A1AB
 
 ・誤検知対応
-Google：申請済（Safe Browsing）
-Ikarus：申請済（fp@ikarus.at
-）
+終了
 
 ──────────────────────
 10. 最終フォルダ構成
