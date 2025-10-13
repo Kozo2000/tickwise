@@ -1,141 +1,78 @@
-## 🔍 Why tickwise uses Rust (and not C++)
+🔍 Why tickwise uses Rust — author’s note
 
-tickwise is a stock analysis CLI tool designed with security, robustness, and clarity in mind.  
-Here's why Rust was chosen over C++ — from functionality to safety.
+Context: solo project now, designed to scale to a team later.
 
----
+Design intent — why we narrowed to C++ & Rust
 
-### 🧩 Feature Implementation
+Separate UI and engine. We built the engine first so the UI can evolve independently.
 
-| Item                | Rust                            | C++                               |
-|---------------------|----------------------------------|------------------------------------|
-| CLI argument parsing | `clap` (simple, type-safe)      | `getopt`, Boost.ProgramOptions (verbose) |
-| JSON handling       | `serde_json` (auto serialization) | RapidJSON, nlohmann/json (manual types) |
-| API communication   | `reqwest` (async ready)          | `libcurl`, Boost.Beast (complex)  |
-| String formatting   | `format!`, `println!` (easy)     | `std::ostringstream` (cumbersome) |
+Native performance. The engine must be fast with zero-overhead abstractions and no VM tax.
 
-✅ **Rust wins in developer speed and correctness.**
+No GC pauses. We prefer deterministic latency and explicit lifetime control over runtime garbage collection.
 
----
+Given these constraints, C++ and Rust were the natural shortlist. Both can meet the performance and control requirements; the remaining question was maintenance and security over time.
 
-### 🛡 Security and Safety
+We seriously considered C++. It remains a first-class option with a deep ecosystem and outstanding performance, and in capable hands it ships robust systems every day.
+Our decision for Rust isn’t about superiority—it’s about fit for a solo workflow today and smooth collaboration tomorrow.
 
-| Item                    | Rust                                  | C++                                    |
-|-------------------------|----------------------------------------|-----------------------------------------|
-| Bounds checking         | `Vec[i]` panics, `get(i)` returns `Option` | `vec[i]` may cause undefined behavior  |
-| NULL pointer risks      | `Option<T>` enforces handling          | `nullptr` is common, often misused     |
-| Memory management       | Ownership & borrow checking (compiler) | Manual (`new`, `delete`, `shared_ptr`) |
-| Thread safety           | `Send` / `Sync` trait enforced         | Manual, prone to data races            |
+What mattered in this project
 
-✅ **Rust eliminates entire classes of memory vulnerabilities at compile time.**
+Fail early at compile time. Ownership/borrowing and the borrow checker turn aliasing and lifetime mistakes into compile errors, not late tickets. That let a single maintainer stay focused on domain logic instead of chasing memory hazards afterwards.
 
----
+Type-safe plumbing with minimal glue. clap (CLI), reqwest (HTTP), and serde (JSON) mapped cleanly to tickwise, keeping behavior predictable without heavy scaffolding.
 
-### 🛠 Design and Maintainability
+Reproducible releases. Cargo + lockfiles made deterministic builds and hash verification straightforward.
 
-| Item                | Rust                              | C++                               |
-|---------------------|------------------------------------|------------------------------------|
-| Type handling       | Strong inference + boundary enforcement | Implicit conversions = bugs       |
-| Error handling      | `Result`, `Option` enforced        | Exceptions can be ignored         |
-| Ownership model     | Built-in, enforced by compiler     | No native ownership, must track manually |
-| Predictable behavior| Panics or rejections by design     | Frequent undefined behavior        |
+Built to welcome a team later
 
-✅ **Rust enforces correctness by design.**
+Modular structure (crates/modules) and typed domain models keep boundaries clear.
 
----
+Deterministic toolchain with rustfmt/clippy reduces review friction.
 
-### 🧠 Developer Burden
+Test-first posture that CI can extend with fuzzing and concurrency checks.
 
-| Item                | Rust                          | C++                            |
-|---------------------|-------------------------------|--------------------------------|
-| Code verbosity      | Slightly verbose in types      | Often shorter, but ambiguous   |
-| Learning curve      | Steep at first, then smooth    | Familiar, but full of pitfalls |
-| Debugging           | Compiler feedback is strong    | Silent failures are common     |
+Room for FFI if we ever need to bind existing C/C++ libraries.
 
-✅ **Rust: Harder to learn, easier to trust.**
+C++ would also have been viable with disciplined idioms, sanitizers, and thorough reviews. Given a solo maintainer and short release cycles, leaning on Rust’s compile-time guarantees (the borrow checker) aligned better with our risk and cadence.
 
----
+Bottom line: tickwise uses Rust so one person can ship safely today and a team can build on it tomorrow—not because C++ can’t, but because this stack fits our constraints.
 
-### ✅ Conclusion
+🔍 なぜ tickwise は Rust を選んだか（作者メモ）
 
-> If tickwise had been written in C++,  
-> it might have compiled faster, but it wouldn't be **safe to ship**.
+※ 現在は個人開発、将来のチーム開発を見据えた設計です。
 
-Rust makes tickwise:
-- Safer by default
-- Easier to extend and maintain
-- Trustworthy for sensitive financial data
+設計方針 ― C++ と Rust に絞った理由
 
-That’s why tickwise is built with **Rust**, not C++.
+UI とエンジンの分離。 まずは エンジンを先行開発し、UIは独立に進化できるようにしたい。
 
-## 🔍 なぜ tickwise は Rust で作られたのか（そして C++ ではないのか）
+ネイティブ性能の確保。 エンジンは高速で、ゼロコスト抽象・非VMが前提。
 
-tickwise は、**セキュリティ・堅牢性・明快な設計**を重視した株価分析CLIツールです。  
-ここでは Rust を C++ より選んだ理由を、**機能性・安全性・保守性・開発効率**の観点から比較します。
+GC を避ける。 実行時のガベージコレクションではなく、予測可能なレイテンシと明示的なライフタイム管理を重視。
 
----
+この前提から、候補は自然に C++ と Rust に絞られました。性能と制御の要件はどちらでも満たせるため、残る論点は長期のメンテナンス性と安全性でした。
 
-### 🧩 機能実装のしやすさ
+C++ も真剣に検討しました。エコシステムと性能は第一級で、熟練の現場では高信頼なプロダクトが日々生まれています。
+今回 Rust を選んだのは優劣ではなく、個人開発の運用と将来の協調開発に最も合致したためです。
 
-| 項目                 | Rust（ラスト）                      | C++（シープラスプラス）                  |
-|----------------------|--------------------------------------|------------------------------------------|
-| CLI引数の解析         | `clap`（簡単・型安全）               | `getopt` や Boost（記述量多い）           |
-| JSON処理             | `serde_json`（直列化が簡単）         | RapidJSON や nlohmann/json（型定義が煩雑） |
-| API通信              | `reqwest`（非同期対応）              | `libcurl`, Boost.Beast（学習コスト高）    |
-| テキスト整形         | `format!`, `println!`（書きやすい）  | `std::ostringstream`（冗長・誤りやすい）   |
+本プロジェクトで効いた点
 
-✅ **Rust の方が開発が早く、ミスも少ない。**
+コンパイル時に失敗してくれる。 所有権／借用と borrow checker により、エイリアシングやライフタイムの不整合を実行前にエラー化。個人開発でも後追いのメモリ不具合に時間を取られにくい。
 
----
+型安全で配線が少ない。 clap（CLI）・reqwest（HTTP）・serde（JSON）が要件に素直に合い、重いボイラープレートが不要。
 
-### 🛡 セキュリティと安全性
+再現ビルドが容易。 Cargo＋lockfile でハッシュ検証やツールチェーン固定が簡単。
 
-| 項目                 | Rust                                  | C++                                    |
-|----------------------|----------------------------------------|-----------------------------------------|
-| 境界外アクセス         | `Vec[i]` は panic、`get(i)` は Option型     | `vec[i]` は未定義動作の恐れ           |
-| NULLポインタの扱い     | `Option<T>` で存在チェックを強制される     | `nullptr` は普通に使われ、誤用しやすい |
-| メモリ管理             | 所有権・借用によるコンパイル時検査        | `new/delete`, `shared_ptr` が必要    |
-| スレッドの安全性        | `Send` / `Sync` トレイトで静的に検査      | 自己責任。データ競合の可能性あり       |
+将来のチーム化に備えた作り
 
-✅ **Rustは、C++では起きるバグの“原因そのもの”を排除できる。**
+モジュール分割と型付きドメインモデルで責務境界を明確化。
 
----
+決まったツールチェーン＋rustfmt/clippyでレビュー摩擦を低減。
 
-### 🛠 設計と保守性
+テスト前提で、将来は CI に fuzzing／並行性チェックを追加しやすい。
 
-| 項目                 | Rust                             | C++                                     |
-|----------------------|----------------------------------|------------------------------------------|
-| 型の扱い              | 型推論＋厳格な制約（Option/Result） | 暗黙キャスト多く、設計ミスに繋がる        |
-| エラー処理            | `Result`, `Option` で強制対応       | 例外（`throw`）は無視されがち             |
-| 所有権・借用モデル     | ビルトインで安全性を担保             | 明示的に追跡しなければならない            |
-| コードの予測可能性     | コンパイル時 or 明確な panic         | 未定義動作が多く、挙動が不明確になりやすい |
+FFI 余地を残し、必要なら C/C++ 資産とも連携可能。
 
-✅ **Rustは「壊れない設計」がしやすい。**
+C++ でも、作法・サニタイザ・レビューを徹底すれば成立します。
+ただ、個人開発 × 短いリリースサイクルという前提では、borrow checker によるコンパイル時保証に寄りかかる方が、リスクと手戻りを抑えられると判断しました。
 
----
-
-### 🧠 プログラマの負担
-
-| 項目                | Rust                           | C++                                   |
-|---------------------|----------------------------------|----------------------------------------|
-| 記述量              | 型注釈がやや多くなることも        | STLを使えば短いが、挙動があいまい       |
-| 学習コスト          | 最初は高いが、習得すれば安心        | 親しみやすいが、罠が多い                |
-| デバッグ体験        | コンパイラが強力に指摘してくれる     | サイレントエラーが混ざりやすい          |
-
-✅ **Rust：学習は大変だが、信頼できる。  
-C++：学習は楽だが、運用が怖い。**
-
----
-
-### ✅ 結論
-
-> もし tickwise を C++ で書いていたら、  
-> コンパイルは通っても「人に渡すのが怖い」ツールになっていたかもしれません。
-
-Rustで作った tickwise は：
-
-- **最初から安全**
-- **拡張・保守が簡単**
-- **金融データを扱っても信頼できる**
-
-だから tickwise は **C++ ではなく Rust** で作られています。
+結論： tickwise は 今日ひとりで安全に出せて、明日チームで拡張しやすいことを軸に Rust を選択しました。これは“C++を否定するため”ではなく、本プロジェクトの制約に最も適した選択です。
