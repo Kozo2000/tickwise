@@ -31,4 +31,4 @@ tickwise.env
 .env
 **/*.env
 /data_j.csv
-/data/
+/data/!docs/sbom/sbom.cdx.json
