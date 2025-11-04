@@ -22,7 +22,7 @@
 !/scripts/**
 !/docs/
 !/docs/**
-!/tickwise-windows-SHA256
+!/Tickwise-Windows-SHA256
 
 # (明示的に無視しておきたい一般項目)
 .DS_Store
@@ -31,4 +31,8 @@ tickwise.env
 .env
 **/*.env
 /data_j.csv
-/data/!docs/sbom/sbom.cdx.json
+/data/
+
+# allow release artifacts
+!/Binary/
+!/Binary/*.zip
