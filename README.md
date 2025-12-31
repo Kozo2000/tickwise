@@ -112,8 +112,7 @@ show-news
 --show-news
 
 👉 フル出力はこちら
-samples/softbank-reversal-20251230.pdf
-
+[softbank-reversal-20251230.pdf](samples/softbank-reversal-20251230.pdf)
 # 3. 「逆張り設定とは？」（レシピ解説）
 
 Tickwise には、逆張り時に便利な“3 つの起点”があります。
