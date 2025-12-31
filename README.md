@@ -112,7 +112,7 @@ show-news
 --show-news
 
 👉 フル出力はこちら
-[softbank-reversal-20251230.md](samples/softbank-reversal-20251230.md)
+samples/softbank-reversal-20251230.pdf
 
 # 3. 「逆張り設定とは？」（レシピ解説）
 
