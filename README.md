@@ -239,8 +239,11 @@ target/release/tickwise が生成されます。
 # 9. tickwise.env の例
 
 OPENAI_API_KEY=sk-xxxxx
+
 BRAVE_API_KEY=brv-xxxxx
+
 NEWS_FILTER=true
+
 NEWS_COUNT=20
 
 # 10. 主なコマンドラインオプション（一覧）
