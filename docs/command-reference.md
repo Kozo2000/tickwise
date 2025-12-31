@@ -1,4 +1,4 @@
-1. 基本
+# 1. 基本
 -t, --ticker <STRING>
 
 型: String（Option<String>）
@@ -18,7 +18,7 @@
 
 環境変数: なし
 
-2. テクニカル閾値
+# 2. テクニカル閾値
 --buy-rsi <VALUE>
 
 型: f64
@@ -92,7 +92,7 @@ CLI フラグ --macd-minus-ok を付ける または
 
 MACD_MINUS_OK が真（get_bool_env が true）
 
-3. スタンス
+# 3. スタンス
 --stance <buyer|seller|holder>
 
 型: String
@@ -112,7 +112,7 @@ STANCE があればそれを使用、なければ "holder"
 
 その後 parse_stance(&stance_source) で内部 enum に変換
 
-4. 拡張テクニカル指標フラグ
+# 4. 拡張テクニカル指標フラグ
 共通仕様
 
 型: すべて bool
@@ -186,7 +186,7 @@ or 環境変数 EMA=true
 CLI or デフォルト 8.0 を受け取り、sanitize_percent(value, 0.0, 100.0, "...") で
 0.0〜100.0 の範囲にクリップ
 
-5. Weight（重み付け）
+# 5. Weight（重み付け）
 共通仕様
 
 型: f64
@@ -247,7 +247,7 @@ CLI で指定 → CLI 優先
 
 --weight-ichimoku
 
-6. LLM / OpenAI 関連
+# 6. LLM / OpenAI 関連
 -O, --no-llm
 
 型: bool
@@ -336,7 +336,7 @@ CLI 指定あり → その文字列
 
 debug_prompt: args.debug_prompt || get_bool_env("DEBUG_PROMPT")
 
-7. Brave / ニュース関連
+# 7. Brave / ニュース関連
 --brave-api-key <KEY>
 
 型: Option<String>
@@ -452,7 +452,7 @@ news_filter 有効: "pw"
 
 環境変数: NEWS_FRESHNESS
 
-8. ログ / 出力関連
+# 8. ログ / 出力関連
 --save-technical-log
 
 型: bool
@@ -570,7 +570,7 @@ required_unless_present = "show_log_header" により
 環境変数: なし
 （debug_args: args.debug_args）
 
-9. プロンプト長さ（LLM 側テキスト）
+# 9. プロンプト長さ（LLM 側テキスト）
 共通仕様
 
 型: usize
@@ -601,7 +601,7 @@ MAX_REVIEW_LENGTH
 
 決定ロジック: get_usize_from_args_or_env(arg_value, ENV_NAME, default)
 
-10. エイリアス関連
+# 10. エイリアス関連
 --alias-csv <PATH>
 
 型: Option<String>
@@ -625,7 +625,7 @@ CLI 指定あり → そのパス
 環境変数: なし
 （Config には直接出てこないが、ニュース検索側の挙動制御用）
 
-11. デバッグ系その他
+# 11. デバッグ系その他
 
 -n, --no-news → 上述ニュース系
 
