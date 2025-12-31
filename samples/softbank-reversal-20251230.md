@@ -1,12 +1,4 @@
-tickwise -t 9984.T \
-    --macd-minus-ok \
-    --buy-rsi 20 \
-    --macd-diff-low 1 \
-    --bollinger \
-    --bb-bandwidth-squeeze-pct 10 \
-    --stance buyer \
-    --show-news
-🔧 --buy-rsi=20.00 を指定 → RSIが20.00以下で買い圏とみなされます
+ 🔧 --buy-rsi=20.00 を指定 → RSIが20.00以下で買い圏とみなされます
 🔧 --macd-diff-low=1.00 を指定 → MACD差が1.00未満ならスコアを中立に補正します
 
 📊 銘柄: ソフトバンクグループ（9984.T）
