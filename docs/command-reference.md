@@ -1,40 +1,70 @@
-# 1. 基本
--t, --ticker <STRING>
+# Tickwise コマンドラインリファレンス
 
-型: String（Option<String>）
+tickwise は、株価のテクニカル分析＋ニュース要約を行う Rust 製 CLI ツールです。
+このドキュメントでは、**各オプションが「何をするためのものか」**と、型・既定値・環境変数との関係をまとめます。
+
+# 0. 基本的な呼び出し例
+もっとも標準的：テクニカル＋ニュース＋LLM
+tickwise -t 7203.T
+
+ニュース・LLMなしでテクニカルだけ
+tickwise -t AAPL --no-news --no-llm
+
+ログの CSV ヘッダだけ確認
+tickwise --show-log-header
+
+
+--show-log-header を使うときだけ、--ticker は省略可能です。
+
+# 1. 基本オプション
+-t, --ticker <SYMBOL>
+
+目的: 分析対象の銘柄（ティッカー）を指定する。
+
+型: String（内部では Option<String>）
 
 必須:
 
-通常: 必須（required_unless_present = "show_log_header"）
+通常: 必須
 
 --show-log-header 使用時のみ省略可
 
 既定値:
 
-通常: なし（指定が必要）
+CLI で指定があればその値
 
---show-log-header 単独時のみ、内部的に "SPY" が使われる
-（ticker: args.ticker.clone().unwrap_or_else(|| "SPY".to_string())）
+--show-log-header 単独時のみ、内部的に "SPY" を使用
 
 環境変数: なし
 
-# 2. テクニカル閾値
+備考:
+
+日本株: 7203.T
+
+米株: AAPL, MSFT
+
+特殊文字を含む指数など: 'S&P500' のようにクォートで囲む
+
+# 2. テクニカル閾値関連
 --buy-rsi <VALUE>
+
+目的: 「売られすぎ（買い検討）」とみなす RSI 閾値を指定する。
 
 型: f64
 
-既定値（clap）: 30.0
+既定値: 30.0
 
 環境変数: BUY_RSI
 
-決定ロジック:
+決定ルール:
 
-CLI で --buy-rsi を指定した場合: その値が優先
+CLI 指定あり → その値
 
-指定なし（= 30.0 のまま）の場合:
-BUY_RSI があればそれを f64 として採用、なければ 30.0
+CLI 指定なし（= 30.0 のまま） → BUY_RSI があればそれ、なければ 30.0
 
 --sell-rsi <VALUE>
+
+目的: 「買われすぎ（売り／利確検討）」とみなす RSI 閾値を指定する。
 
 型: f64
 
@@ -42,7 +72,7 @@ BUY_RSI があればそれを f64 として採用、なければ 30.0
 
 環境変数: SELL_RSI
 
-決定ロジック:
+決定ルール:
 
 CLI 指定あり → その値
 
@@ -50,13 +80,15 @@ CLI 指定あり → その値
 
 --macd-diff-low <VALUE>
 
+目的: MACD と Signal の乖離が「小さい」とみなす閾値（転換近辺検知）。
+
 型: f64
 
 既定値: 2.0
 
 環境変数: MACD_DIFF_LOW
 
-決定ロジック:
+決定ルール:
 
 CLI 指定あり → その値
 
@@ -64,13 +96,15 @@ CLI 指定あり → その値
 
 --macd-diff-mid <VALUE>
 
+目的: MACD 乖離が「中程度」とみなす閾値（勢いの強さの段階分け）。
+
 型: f64
 
 既定値: 10.0
 
 環境変数: MACD_DIFF_MID
 
-決定ロジック:
+決定ルール:
 
 CLI 指定あり → その値
 
@@ -78,177 +112,117 @@ CLI 指定あり → その値
 
 -m, --macd-minus-ok
 
+目的: MACD がマイナス圏でも、条件付きで買いシグナルを許可する（逆張り寄り）。
+
 型: bool
 
 既定値: false
 
 環境変数: MACD_MINUS_OK
 
-決定ロジック:
+決定ルール:
 
 true になる条件:
 
-CLI フラグ --macd-minus-ok を付ける または
+CLI で --macd-minus-ok を指定 または
 
-MACD_MINUS_OK が真（get_bool_env が true）
+MACD_MINUS_OK が真
 
-# 3. スタンス
+# 3. スタンス（視点）の指定
 --stance <buyer|seller|holder>
+
+目的: コメントや評価を「買い手／売り手／ホルダー」どの視点で出すか決める。
 
 型: String
 
-許可値（clap）: "buyer", "seller", "holder"
+許可値: buyer, seller, holder
 
-既定値（clap）: "holder"
+既定値（clap）: holder
 
 環境変数: STANCE
 
-決定ロジック:
+決定ルール:
 
-CLI で --stance を buyer / seller に指定 → その値が優先
+CLI で buyer / seller を指定 → そのまま使用
 
-CLI で holder のまま（デフォルト）の場合 →
-STANCE があればそれを使用、なければ "holder"
+CLI で holder のまま → STANCE があればそれ、なければ holder
 
-その後 parse_stance(&stance_source) で内部 enum に変換
+# 4. 拡張テクニカル指標 ON/OFF
 
-# 4. 拡張テクニカル指標フラグ
-共通仕様
+どの指標をスコアに含めるかを選択するフラグ群。
+CLI フラグ or 環境変数が true なら有効化。
 
-型: すべて bool
+共通仕様:
 
-既定値: すべて false
+型: bool
 
-環境変数:
+既定値: false
 
-EMA
+有効化条件:
+CLI フラグを付ける または 対応 ENV が真 (get_bool_env)。
 
-SMA
-
-ROC
-
-ADX
-
-STOCHASTICS
-
-BOLLINGER
-
-FIBONACCI
-
-VWAP
-
-ICHIMOKU
-
-決定ロジック（すべて同じパターン）:
-
-if args.ema || get_bool_env("EMA") {
-    extensions.push(ExtensionIndicator::Ema);
-}
-
-
-つまり:
-
-CLI で --ema を立てる
-
-or 環境変数 EMA=true
-→ いずれかで有効化され、enabled_extensions に入る
-
-対象フラグ一覧
-
---ema
-
---sma
-
---roc
-
---adx
-
---stochastics
-
---bollinger
-
---fibonacci
-
---vwap
-
---ichimoku
-
+指標ごとのフラグ
+オプション	目的	ENV
+--ema	EMA（指数平滑移動平均）の分析を有効化	EMA
+--sma	SMA（単純移動平均）の分析を有効化	SMA
+--roc	ROC（変化率）の分析を有効化	ROC
+--adx	ADX（トレンド強度）の分析を有効化	ADX
+--stochastics	ストキャスティクス（%K, %D）の分析を有効化	STOCHASTICS
+--bollinger	ボリンジャーバンドの分析を有効化	BOLLINGER
+--fibonacci	フィボナッチ・リトレースメントの分析を有効化	FIBONACCI
+--vwap	VWAP の分析を有効化	VWAP
+--ichimoku	一目均衡表の分析を有効化	ICHIMOKU
 --bb-bandwidth-squeeze-pct <VALUE>
+
+目的: ボリンジャーバンド帯域幅（%）が「スクイーズ」と判定される閾値を指定。
 
 型: f64
 
 既定値: 8.0
 
-環境変数: なし（sanitize_percent のみ）
+環境変数: なし
 
-決定ロジック:
+その他:
 
-CLI or デフォルト 8.0 を受け取り、sanitize_percent(value, 0.0, 100.0, "...") で
-0.0〜100.0 の範囲にクリップ
+0.0〜100.0 の範囲にサニタイズされる（sanitize_percent）
 
-# 5. Weight（重み付け）
-共通仕様
+# 5. スコアの重み付け（Weight）
+
+各カテゴリのスコアに掛ける「重み」。
+1.0 が標準。大きくするとその指標を強調、小さくすると弱める。
+
+共通仕様:
 
 型: f64
 
-既定値（clap）: 1.0
+既定値: 1.0
 
-環境変数:
+環境変数: WEIGHT_○○ 系
 
-WEIGHT_BASIC
+決定ルール（全て同じ）:
 
-WEIGHT_EMA
+CLI で 1.0 以外を指定 → CLI 優先
 
-WEIGHT_SMA
+CLI が 1.0 のまま → ENV があれば ENV 優先
 
-WEIGHT_BOLLINGER
+どちらもなければ 1.0
 
-WEIGHT_ROC
-
-WEIGHT_ADX
-
-WEIGHT_STOCHASTICS
-
-WEIGHT_FIBONACCI
-
-WEIGHT_VWAP
-
-WEIGHT_ICHIMOKU
-
-決定ロジック: get_f64_from_args_or_env(arg_value, ENV_NAME, 1.0)
-
-実装パターンから見ると:
-
-CLI 側が既定値 1.0 のまま → ENV があれば ENV 優先
-
-CLI で指定 → CLI 優先
-
-どちらもなし → 1.0
-
-対象オプション
-
---weight-basic
-
---weight-ema
-
---weight-sma
-
---weight-bollinger
-
---weight-roc
-
---weight-adx
-
---weight-stochastics
-
---weight-fibonacci
-
---weight-vwap
-
---weight-ichimoku
+オプション	目的	ENV
+--weight-basic	基本スコア（RSI, MACD 等）の重み	WEIGHT_BASIC
+--weight-ema	EMA スコアの重み	WEIGHT_EMA
+--weight-sma	SMA スコアの重み	WEIGHT_SMA
+--weight-bollinger	ボリンジャーバンドスコアの重み	WEIGHT_BOLLINGER
+--weight-roc	ROC スコアの重み	WEIGHT_ROC
+--weight-adx	ADX スコアの重み	WEIGHT_ADX
+--weight-stochastics	ストキャスティクススコアの重み	WEIGHT_STOCHASTICS
+--weight-fibonacci	フィボナッチスコアの重み	WEIGHT_FIBONACCI
+--weight-vwap	VWAP スコアの重み	WEIGHT_VWAP
+--weight-ichimoku	一目均衡表スコアの重み	WEIGHT_ICHIMOKU
 
 # 6. LLM / OpenAI 関連
 -O, --no-llm
+
+目的: LLM（OpenAI）へのアクセスを完全にスキップする。
 
 型: bool
 
@@ -256,41 +230,33 @@ CLI で指定 → CLI 優先
 
 環境変数: NO_LLM
 
-決定ロジック:
-
-no_llm: args.no_llm || get_bool_env("NO_LLM")
+効果: ニュース要約などテキスト生成を行わず、テクニカル分析のみ実行。
 
 --llm-provider <NAME>
 
+目的: 使用する LLM プロバイダ名を指定（将来拡張用）。
+
 型: String
 
-既定値（clap）: "openai"
+許可値: openai
 
-許可値（clap）: "openai"
+既定値:
 
-環境変数: LLM_PROVIDER
+CLI が openai のまま → LLM_PROVIDER or "openai"
 
-決定ロジック:
-
-llm_provider: if args.llm_provider == "openai" {
-    std::env::var("LLM_PROVIDER").unwrap_or_else(|_| "openai".to_string())
-} else {
-    args.llm_provider.clone()
-}
-
-
-現状、clap 側で "openai" しか許可されていないため、
-実質 "openai" 固定（将来の拡張用フック）。
+備考: 現バージョンでは実質 openai 固定。
 
 -M, --openai-model <MODEL_NAME>
 
+目的: 使用する OpenAI モデル名を指定する。
+
 型: String
 
-既定値（clap）: "gpt-4.1-nano"
+既定値: "gpt-4.1-nano"
 
 環境変数: OPENAI_MODEL
 
-決定ロジック:
+決定ルール:
 
 CLI 指定あり → そのモデル名
 
@@ -298,19 +264,23 @@ CLI 指定あり → そのモデル名
 
 --openai-api-key <KEY>
 
+目的: OpenAI API キーを CLI から直接指定する。
+
 型: Option<String>
 
 既定値: なし
 
 環境変数: OPENAI_API_KEY
 
-決定ロジック:
+決定ルール:
 
 CLI 指定あり → そのキー
 
-指定なし → OPENAI_API_KEY or ""（空文字）
+指定なし → OPENAI_API_KEY or 空文字
 
---openai-extra-note <TEXT>
+-x, --openai-extra-note <TEXT>
+
+目的: LLM へ送るプロンプトに「一言スタイル指定」を追加する。
 
 型: Option<String>
 
@@ -318,13 +288,15 @@ CLI 指定あり → そのキー
 
 環境変数: OPENAI_EXTRA_NOTE
 
-決定ロジック:
+例:
 
-CLI 指定あり → その文字列
+"配当より成長性を重視して評価して"
 
-指定なし → OPENAI_EXTRA_NOTE or None
+"短期トレード目線を強めにして欲しい"
 
 -d, --debug-prompt
+
+目的: 実際には API を叩かず、プロンプトだけ debug_prompt.txt に保存する。
 
 型: bool
 
@@ -332,12 +304,12 @@ CLI 指定あり → その文字列
 
 環境変数: DEBUG_PROMPT
 
-決定ロジック:
+用途: プロンプト設計のデバッグ / LLM なしで中身だけ確認したいとき。
 
-debug_prompt: args.debug_prompt || get_bool_env("DEBUG_PROMPT")
-
-# 7. Brave / ニュース関連
+# 7. ニュース / Brave 関連
 --brave-api-key <KEY>
+
+目的: Brave News API のキーを CLI から指定する。
 
 型: Option<String>
 
@@ -345,13 +317,9 @@ debug_prompt: args.debug_prompt || get_bool_env("DEBUG_PROMPT")
 
 環境変数: BRAVE_API_KEY
 
-決定ロジック:
-
-CLI 指定あり → そのキー
-
-指定なし → BRAVE_API_KEY or ""
-
 -n, --no-news
+
+目的: ニュース検索そのものをスキップする。
 
 型: bool
 
@@ -359,25 +327,21 @@ CLI 指定あり → そのキー
 
 環境変数: NO_NEWS
 
-決定ロジック:
-
-no_news: args.no_news || get_bool_env("NO_NEWS")
-
 -q, --custom-news-query <QUERY>
+
+目的: ニュース検索クエリを銘柄コード以外の自由な文字列で指定する。
 
 型: Option<String>
 
-既定値: None
+既定値: なし
 
 環境変数: CUSTOM_NEWS_QUERY
 
-決定ロジック:
-
-CLI 指定あり → その文字列
-
-指定なし → CUSTOM_NEWS_QUERY（空 or 空白のみなら破棄）
+備考: 空文字・空白のみは無視される。
 
 --news-filter
+
+目的: ニュース検索を投資・財務系キーワードに寄せる。
 
 型: bool
 
@@ -385,11 +349,55 @@ CLI 指定あり → その文字列
 
 環境変数: NEWS_FILTER
 
-決定ロジック:
+--news-count <N>
 
-news_filter: args.news_filter || get_bool_env("NEWS_FILTER")
+目的: 取得するニュース件数の上限を指定する。
+
+型: Option<usize> → Config では usize
+
+範囲: 1..=50
+
+環境変数: NEWS_COUNT
+
+既定値:
+
+CLI 指定あり → その値（1〜50に clamp）
+
+指定なし & NEWS_COUNT あり → それ（clamp）
+
+どちらもなし →
+
+news_filter 有効: 20
+
+無効: 50
+
+--news-freshness <pd|pw|pm|py|all>
+
+目的: ニュースの期間（どこまで遡るか）を指定する。
+
+型: Option<String> → Config では String
+
+許可値:
+
+pd (1 日) / pw (1 週間) / pm (1 ヶ月) / py (1 年) / all (制限なし)
+
+環境変数: NEWS_FRESHNESS
+
+既定値:
+
+CLI 指定あり → その値
+
+指定なし & NEWS_FRESHNESS あり → それ
+
+どちらもなし →
+
+news_filter 有効: "pw"
+
+無効: "pm"
 
 --show-news
+
+目的: ニュース本文のハイライトをターミナルに表示する。
 
 型: bool
 
@@ -397,63 +405,10 @@ news_filter: args.news_filter || get_bool_env("NEWS_FILTER")
 
 環境変数: SHOW_NEWS
 
-決定ロジック:
-
-show_news: args.show_news || get_bool_env("SHOW_NEWS")
-
---news-count <N>
-
-型: Option<usize>（ただし Config では usize）
-
-許容範囲: 1..=50（clamp(1, 50)）
-
-既定値:
-
-NEWS_COUNT があればそれを使用（clamp 1..50）
-
-それもなければ:
-
-news_filter 有効（CLI or ENV）: 20
-
-news_filter 無効: 50
-
-環境変数: NEWS_COUNT
-
-決定ロジック:
-
-news_count: match args.news_count {
-    Some(n_count) => n_count.clamp(1, 50),
-    None => env::var("NEWS_COUNT")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .map(|n_count| n_count.clamp(1, 50))
-        .unwrap_or(if args.news_filter || get_bool_env("NEWS_FILTER") {
-            20
-        } else {
-            50
-        }),
-}
-
---news-freshness <pd|pw|pm|py|all>
-
-型: Option<String>（Config では String）
-
-許可値: "pd", "pw", "pm", "py", "all"
-
-既定値:
-
-NEWS_FRESHNESS があればそれ
-
-なければ:
-
-news_filter 有効: "pw"
-
-無効: "pm"
-
-環境変数: NEWS_FRESHNESS
-
 # 8. ログ / 出力関連
 --save-technical-log
+
+目的: テクニカル分析結果をログ（CSV/JSON）として保存する。
 
 型: bool
 
@@ -461,50 +416,41 @@ news_filter 有効: "pw"
 
 環境変数: SAVE_TECHNICAL_LOG
 
-決定ロジック:
-
-save_technical_log: args.save_technical_log || get_bool_env("SAVE_TECHNICAL_LOG")
-
 --log-format <csv|json>
+
+目的: テクニカルログの形式を指定する。
 
 型: String
 
-既定値（clap）: "csv"
+既定値: "csv"
 
-環境変数: LOG_FORMAT（※現行コードではほぼ使われない）
+環境変数: LOG_FORMAT（※異常値を入れたときだけ使用される）
 
-決定ロジック:
+備考:
 
-log_format: if args.log_format != "csv" && args.log_format != "json" {
-    env::var("LOG_FORMAT").unwrap_or_else(|_| "csv".to_string())
-} else {
-    args.log_format.clone()
-}
+CLI で "csv" or "json" を指定（既定含む）した場合、そのまま使用。
 
-
-実質:
-
-CLI で "csv" / "json" を指定（またはデフォルト "csv"） → そのまま使用
-
-それ以外の文字列を CLI で渡したときだけ LOG_FORMAT or "csv"
-
-つまり 通常運用では LOG_FORMAT 環境変数は効かない
+それ以外の文字列を CLI に入れたときのみ LOG_FORMAT or "csv" にフォールバック。
 
 --log-dir <DIR>
 
+目的: ログを保存するディレクトリを指定する。
+
 型: String
 
-既定値（clap）: "log"
+既定値: "log"
 
 環境変数: LOG_DIR
 
-決定ロジック:
+決定ルール:
 
-CLI で --log-dir 指定あり → その値
+CLI 指定あり → そのディレクトリ
 
-指定なし（＝ "log" のまま） → LOG_DIR or "log"
+指定なし → LOG_DIR or "log"
 
 --data-append
+
+目的: 既存 CSV に追記する（新規ファイルを作らない）。
 
 型: bool
 
@@ -512,11 +458,9 @@ CLI で --log-dir 指定あり → その値
 
 環境変数: CSV_APPEND
 
-決定ロジック:
-
-data_append: args.data_append || get_bool_env("CSV_APPEND")
-
 --log-flat
+
+目的: ティッカーごとのサブディレクトリを作らず、すべて同じディレクトリにログを出す。
 
 型: bool
 
@@ -524,85 +468,65 @@ data_append: args.data_append || get_bool_env("CSV_APPEND")
 
 環境変数: LOG_FLAT
 
-決定ロジック:
-
-log_flat: args.log_flat || get_bool_env("LOG_FLAT")
-
 --stdout-log
+
+目的: ログ（CSV/JSON）をファイルではなく標準出力に出す。
 
 型: bool
 
 既定値: false
 
 環境変数: なし
-（stdout_log: args.stdout_log）
+
+用途: jq や他ツールとのパイプ連携向け。
 
 --show-log-header
 
+目的: 現在の設定に基づいた CSV のヘッダ行だけを出力して終了する。
+
 型: bool
 
 既定値: false
 
 環境変数: なし
 
-補足:
+特記事項:
 
-required_unless_present = "show_log_header" により
---show-log-header 単体のときだけ ticker が不要
-
-このとき内部では ticker = "SPY" が使われる
+このオプション単独のときだけ --ticker を省略可能（内部的には "SPY" を使用）。
 
 --silent
 
-型: bool
-
-既定値: false
-
-環境変数: なし
-（silent: args.silent）
-
---debug-args
+目的: 通常の出力をすべて抑制し、エラーのみ表示する。
 
 型: bool
 
 既定値: false
 
 環境変数: なし
-（debug_args: args.debug_args）
 
-# 9. プロンプト長さ（LLM 側テキスト）
-共通仕様
+用途: cron／バッチ実行時などでログだけ残したい場合。
+
+# 9. プロンプト長さ（LLM テキスト量調整）
+
+LLM に渡す各セクションの最大文字数。ターミナル幅や読みやすさに応じて調整。
+
+共通仕様:
 
 型: usize
 
-既定値:
+環境変数: MAX_○○_LENGTH 系
 
-max_note_length: 300
+オプション	目的	既定値	ENV
+--max-note-length	「注意ポイント」最大文字数	300	MAX_NOTE_LENGTH
+--max-shortterm-length	「1週間短期目線」最大文字数	150	MAX_SHORTTERM_LENGTH
+--max-midterm-length	「1ヶ月中期目線」最大文字数	150	MAX_MIDTERM_LENGTH
+--max-news-length	「ニュースハイライト」最大文字数	600	MAX_NEWS_LENGTH
+--max-review-length	「総評」最大文字数	1000	MAX_REVIEW_LENGTH
 
-max_shortterm_length: 150
-
-max_midterm_length: 150
-
-max_news_length: 600
-
-max_review_length: 1000
-
-環境変数:
-
-MAX_NOTE_LENGTH
-
-MAX_SHORTTERM_LENGTH
-
-MAX_MIDTERM_LENGTH
-
-MAX_NEWS_LENGTH
-
-MAX_REVIEW_LENGTH
-
-決定ロジック: get_usize_from_args_or_env(arg_value, ENV_NAME, default)
-
-# 10. エイリアス関連
+# 10. エイリアス・デバッグ系
 --alias-csv <PATH>
+
+目的: 銘柄名エイリアス定義 CSV のパスを指定する。
 
 型: Option<String>
 
@@ -610,25 +534,22 @@ MAX_REVIEW_LENGTH
 
 環境変数: ALIAS_CSV
 
-決定ロジック:
-
-CLI 指定あり → そのパス
-
-指定なし → ALIAS_CSV or None
-
 -a, --no-alias
+
+目的: エイリアス展開をスキップし、ティッカー／正式名称だけでニュース検索する。
 
 型: bool
 
 既定値: false
 
 環境変数: なし
-（Config には直接出てこないが、ニュース検索側の挙動制御用）
 
-# 11. デバッグ系その他
+--debug-args
 
--n, --no-news → 上述ニュース系
+目的: パース済みのコマンドライン引数内容を表示する（デバッグ用）。
 
--O, --no-llm → 上述 LLM 系
+型: bool
 
---silent / --debug_args → 上述
+既定値: false
+
+環境変数: なし
