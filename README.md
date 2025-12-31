@@ -65,9 +65,8 @@ Weight（重み）を使った“独自配点システム”
 → 実質的には数百万通りの戦略構成が可能。
 
 以下はその中の “逆張り構成の 1 例” のみ紹介です。
-Tickwise の全体像＝“逆張りツール”ではありません。
 
-# 3. 使用例：逆張り強めの構成（ソフトバンク G）
+#  使用例：逆張り強めの構成（ソフトバンク G）
 
 ここでは、逆張りレシピの“わかりやすいサンプル”として
 ソフトバンクグループ（9984.T）を例に説明します。
@@ -115,7 +114,7 @@ show-news
 👉 フル出力はこちら
 samples/softbank-reversal-20251230.md
 
-# 4. 「逆張り設定とは？」（レシピ解説）
+# 3. 「逆張り設定とは？」（レシピ解説）
 
 Tickwise には、逆張り時に便利な“3 つの起点”があります。
 
@@ -138,25 +137,25 @@ RSI ≤ 20 → 強い売られすぎ。
 シグナルとの乖離が小さいときに
 判定を中立へ補正して過剰反応を防止。
 
-# 5. インストール
+# 4. インストール
 
 git clone https://github.com/xxx/tickwise.git
 
 cd tickwise
 cargo build --release
 
-# 6. tickwise.env の例
+# 5. tickwise.env の例
 
 OPENAI_API_KEY=sk-xxxxx
 BRAVE_API_KEY=brv-xxxxx
 NEWS_FILTER=true
 NEWS_COUNT=20
 
-# 7. 主なコマンドラインオプション（一覧）
+# 6. 主なコマンドラインオプション（一覧）
 
 👉 詳細版は docs/command-reference.md
 
-# 8. レシピ（戦略プリセット集）
+# 7. レシピ（戦略プリセット集）
 
 👉 docs/recipes/README.md
 
@@ -170,7 +169,7 @@ NEWS_COUNT=20
 
 ボラブレイク戦略 など
 
-# 9. セキュリティと非機能要件
+# 8. セキュリティと非機能要件
 
 API キーは tickwise.env に隔離
 
@@ -184,7 +183,7 @@ CSV / JSON ログ
 
 deterministic（再現性重視）設計
 
-# 10. Git 運用メモ
+# 9. Git 運用メモ
 
 main / feature ブランチ
 
@@ -194,10 +193,10 @@ VT 誤検知時の申請手順 → docs/vt-guide.md
 
 Mac / Windows（MSVC）両対応
 
-# 11. ライセンス
+# 10. ライセンス
 
 MIT License
 
-# 12. お問い合わせ
+# 11. お問い合わせ
 
 Pull Request / Issue 歓迎
