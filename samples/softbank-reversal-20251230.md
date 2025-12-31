@@ -1,4 +1,4 @@
-​　<!-- prevent-list -->
+　<!-- prevent-list -->
 
 🔧 --buy-rsi=20.00 を指定 → RSIが20.00以下で買い圏とみなされます
 
