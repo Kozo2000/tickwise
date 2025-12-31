@@ -162,16 +162,28 @@ CLI フラグ or 環境変数が true なら有効化。
 CLI フラグを付ける または 対応 ENV が真 (get_bool_env)。
 
 指標ごとのフラグ
+
 オプション	目的	ENV
+
 --ema	EMA（指数平滑移動平均）の分析を有効化	EMA
+
 --sma	SMA（単純移動平均）の分析を有効化	SMA
+
 --roc	ROC（変化率）の分析を有効化	ROC
+
 --adx	ADX（トレンド強度）の分析を有効化	ADX
+
 --stochastics	ストキャスティクス（%K, %D）の分析を有効化	STOCHASTICS
+
 --bollinger	ボリンジャーバンドの分析を有効化	BOLLINGER
+
 --fibonacci	フィボナッチ・リトレースメントの分析を有効化	FIBONACCI
+
 --vwap	VWAP の分析を有効化	VWAP
+
 --ichimoku	一目均衡表の分析を有効化	ICHIMOKU
+
+
 --bb-bandwidth-squeeze-pct <VALUE>
 
 目的: ボリンジャーバンド帯域幅（%）が「スクイーズ」と判定される閾値を指定。
@@ -208,16 +220,27 @@ CLI が 1.0 のまま → ENV があれば ENV 優先
 どちらもなければ 1.0
 
 オプション	目的	ENV
+
 --weight-basic	基本スコア（RSI, MACD 等）の重み	WEIGHT_BASIC
+
 --weight-ema	EMA スコアの重み	WEIGHT_EMA
+
 --weight-sma	SMA スコアの重み	WEIGHT_SMA
+
 --weight-bollinger	ボリンジャーバンドスコアの重み	WEIGHT_BOLLINGER
+
 --weight-roc	ROC スコアの重み	WEIGHT_ROC
+
 --weight-adx	ADX スコアの重み	WEIGHT_ADX
+
 --weight-stochastics	ストキャスティクススコアの重み	WEIGHT_STOCHASTICS
+
 --weight-fibonacci	フィボナッチスコアの重み	WEIGHT_FIBONACCI
+
 --weight-vwap	VWAP スコアの重み	WEIGHT_VWAP
+
 --weight-ichimoku	一目均衡表スコアの重み	WEIGHT_ICHIMOKU
+
 
 # 6. LLM / OpenAI 関連
 -O, --no-llm
@@ -517,11 +540,17 @@ LLM に渡す各セクションの最大文字数。ターミナル幅や読み�
 環境変数: MAX_○○_LENGTH 系
 
 オプション	目的	既定値	ENV
+
 --max-note-length	「注意ポイント」最大文字数	300	MAX_NOTE_LENGTH
+
 --max-shortterm-length	「1週間短期目線」最大文字数	150	MAX_SHORTTERM_LENGTH
+
 --max-midterm-length	「1ヶ月中期目線」最大文字数	150	MAX_MIDTERM_LENGTH
+
 --max-news-length	「ニュースハイライト」最大文字数	600	MAX_NEWS_LENGTH
+
 --max-review-length	「総評」最大文字数	1000	MAX_REVIEW_LENGTH
+
 
 # 10. エイリアス・デバッグ系
 --alias-csv <PATH>
