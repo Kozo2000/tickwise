@@ -263,17 +263,42 @@ NEWS_COUNT=20
 
 # 12. セキュリティと非機能要件
 
-API キーは tickwise.env に隔離
+✔ 安全な構造体アクセス（Config / Guard / Result の SoT 設計）
 
-unwrap / expect 不使用
+すべての設定・指標値は 単一の SoT（Config）から参照
 
-SBOM（CycloneDX）生成
+ロジック内での多重定義・再計算を禁止
 
-VirusTotal 誤検知チェックの導線あり
+指標計算は 1 回のみ で固定化
 
-CSV / JSON ログ
+ライブラリに存在する指標は 必ずライブラリを優先
 
-deterministic（再現性重視）設計
+不正値・欠損値などは 事前にサニタイズ
+
+✔ Crash しない Rust 実装
+
+unwrap / expect 禁止
+
+Option / Result で全分岐処理
+
+ロギングを強化（CSV / JSON）
+
+✔ ソフトウェア供給網（SBOM）
+
+CycloneDX 形式の SBOM を生成
+
+依存パッケージの透明化
+
+✔ VirusTotal（ウイルス対策ベンダー）
+
+初回スキャンで誤検知 →
+該当ベンダーへ連絡し誤検知認定取得済み（実施済み）
+
+✔ 再現性のある出力（deterministic）
+
+テクニカル指標は固定ロジック
+
+LLM の揺れは Tickwise の定量データで最小化
 
 # 13. Git 運用メモ
 
