@@ -248,7 +248,7 @@ NEWS_COUNT=20
 
 # 10. 主なコマンドラインオプション（一覧）
 
-👉 詳細版は docs/command-reference.md
+👉 詳細版は [docs/command-reference.md](docs/command-reference.md)
 
 # 11. レシピ（戦略プリセット集）
 
