@@ -126,7 +126,7 @@ tickwise.env.sample  →  tickwise.env
 
 最初に編集が必要なのは API キーだけ です。
 
-# ===== API_KEY =====
+#===== API_KEY =====
 OPENAI_API_KEY=sk-xxxxx
 BRAVE_API_KEY=brv-xxxxx
 
@@ -171,7 +171,6 @@ WEIGHT_EMA=1.0
 4-4. OpenAI / ニュース設定について
 OPENAI_MODEL=gpt-5
 NO_NEWS=false
-USE_BRAVE=false
 NO_OPENAI=false
 
 

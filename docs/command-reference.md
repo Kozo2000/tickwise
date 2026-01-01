@@ -27,11 +27,13 @@ tickwise --show-log-header
 
 通常: 必須
 
+
 --show-log-header 使用時のみ省略可
 
 既定値:
 
 CLI で指定があればその値
+
 
 --show-log-header 単独時のみ、内部的に "SPY" を使用
 
@@ -62,6 +64,7 @@ CLI 指定あり → その値
 
 CLI 指定なし（= 30.0 のまま） → BUY_RSI があればそれ、なければ 30.0
 
+
 --sell-rsi <VALUE>
 
 目的: 「買われすぎ（売り／利確検討）」とみなす RSI 閾値を指定する。
@@ -77,6 +80,7 @@ CLI 指定なし（= 30.0 のまま） → BUY_RSI があればそれ、なけ�
 CLI 指定あり → その値
 
 指定なし → SELL_RSI or 70.0
+
 
 --macd-diff-low <VALUE>
 
@@ -94,6 +98,7 @@ CLI 指定あり → その値
 
 指定なし → MACD_DIFF_LOW or 2.0
 
+
 --macd-diff-mid <VALUE>
 
 目的: MACD 乖離が「中程度」とみなす閾値（勢いの強さの段階分け）。
@@ -109,6 +114,7 @@ CLI 指定あり → その値
 CLI 指定あり → その値
 
 指定なし → MACD_DIFF_MID or 10.0
+
 
 -m, --macd-minus-ok
 
@@ -255,6 +261,7 @@ CLI が 1.0 のまま → ENV があれば ENV 優先
 
 効果: ニュース要約などテキスト生成を行わず、テクニカル分析のみ実行。
 
+
 --llm-provider <NAME>
 
 目的: 使用する LLM プロバイダ名を指定（将来拡張用）。
@@ -268,6 +275,7 @@ CLI が 1.0 のまま → ENV があれば ENV 優先
 CLI が openai のまま → LLM_PROVIDER or "openai"
 
 備考: 現バージョンでは実質 openai 固定。
+
 
 -M, --openai-model <MODEL_NAME>
 
@@ -285,6 +293,7 @@ CLI 指定あり → そのモデル名
 
 指定なし → OPENAI_MODEL or "gpt-4.1-nano"
 
+
 --openai-api-key <KEY>
 
 目的: OpenAI API キーを CLI から直接指定する。
@@ -301,6 +310,7 @@ CLI 指定あり → そのキー
 
 指定なし → OPENAI_API_KEY or 空文字
 
+
 -x, --openai-extra-note <TEXT>
 
 目的: LLM へ送るプロンプトに「一言スタイル指定」を追加する。
@@ -316,6 +326,7 @@ CLI 指定あり → そのキー
 "配当より成長性を重視して評価して"
 
 "短期トレード目線を強めにして欲しい"
+
 
 -d, --debug-prompt
 
@@ -340,6 +351,7 @@ CLI 指定あり → そのキー
 
 環境変数: BRAVE_API_KEY
 
+
 -n, --no-news
 
 目的: ニュース検索そのものをスキップする。
@@ -349,6 +361,7 @@ CLI 指定あり → そのキー
 既定値: false
 
 環境変数: NO_NEWS
+
 
 -q, --custom-news-query <QUERY>
 
@@ -362,6 +375,7 @@ CLI 指定あり → そのキー
 
 備考: 空文字・空白のみは無視される。
 
+
 --news-filter
 
 目的: ニュース検索を投資・財務系キーワードに寄せる。
@@ -371,6 +385,7 @@ CLI 指定あり → そのキー
 既定値: false
 
 環境変数: NEWS_FILTER
+
 
 --news-count <N>
 
@@ -393,6 +408,7 @@ CLI 指定あり → その値（1〜50に clamp）
 news_filter 有効: 20
 
 無効: 50
+
 
 --news-freshness <pd|pw|pm|py|all>
 
@@ -418,6 +434,7 @@ news_filter 有効: "pw"
 
 無効: "pm"
 
+
 --show-news
 
 目的: ニュース本文のハイライトをターミナルに表示する。
@@ -439,6 +456,7 @@ news_filter 有効: "pw"
 
 環境変数: SAVE_TECHNICAL_LOG
 
+
 --log-format <csv|json>
 
 目的: テクニカルログの形式を指定する。
@@ -454,6 +472,7 @@ news_filter 有効: "pw"
 CLI で "csv" or "json" を指定（既定含む）した場合、そのまま使用。
 
 それ以外の文字列を CLI に入れたときのみ LOG_FORMAT or "csv" にフォールバック。
+
 
 --log-dir <DIR>
 
@@ -471,6 +490,7 @@ CLI 指定あり → そのディレクトリ
 
 指定なし → LOG_DIR or "log"
 
+
 --data-append
 
 目的: 既存 CSV に追記する（新規ファイルを作らない）。
@@ -481,6 +501,7 @@ CLI 指定あり → そのディレクトリ
 
 環境変数: CSV_APPEND
 
+
 --log-flat
 
 目的: ティッカーごとのサブディレクトリを作らず、すべて同じディレクトリにログを出す。
@@ -490,6 +511,7 @@ CLI 指定あり → そのディレクトリ
 既定値: false
 
 環境変数: LOG_FLAT
+
 
 --stdout-log
 
@@ -502,6 +524,7 @@ CLI 指定あり → そのディレクトリ
 環境変数: なし
 
 用途: jq や他ツールとのパイプ連携向け。
+
 
 --show-log-header
 
@@ -516,6 +539,7 @@ CLI 指定あり → そのディレクトリ
 特記事項:
 
 このオプション単独のときだけ --ticker を省略可能（内部的には "SPY" を使用）。
+
 
 --silent
 
@@ -563,6 +587,7 @@ LLM に渡す各セクションの最大文字数。ターミナル幅や読み�
 
 環境変数: ALIAS_CSV
 
+
 -a, --no-alias
 
 目的: エイリアス展開をスキップし、ティッカー／正式名称だけでニュース検索する。
@@ -572,6 +597,7 @@ LLM に渡す各セクションの最大文字数。ターミナル幅や読み�
 既定値: false
 
 環境変数: なし
+
 
 --debug-args
 
