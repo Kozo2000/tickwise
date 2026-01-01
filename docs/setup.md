@@ -83,7 +83,7 @@ sk-xxxx の形式で発行されます
 
 3-2. Brave News API キー（ニュース取得に使用）
 
-https://search.brave.com/api/
+https://brave.com/search/api/
 
 ログイン後「Create API Key」
 
