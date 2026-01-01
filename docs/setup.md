@@ -127,7 +127,9 @@ tickwise.env.sample  →  tickwise.env
 最初に編集が必要なのは API キーだけ です。
 
 #===== API_KEY =====
+
 OPENAI_API_KEY=sk-xxxxx
+
 BRAVE_API_KEY=brv-xxxxx
 
 
@@ -143,24 +145,40 @@ Brave：ニュース取得を使う場合に必要
 以下の項目は 初期値のままで問題ありません。
 
 テクニカル閾値
+
 BUY_RSI=30.0
+
 SELL_RSI=70.0
+
 MACD_DIFF_LOW=2.0
+
 MACD_DIFF_MID=10.0
 
 テクニカル指標の有効 / 無効
+
 EMA=True
+
 SMA=True
+
 FIBONACCI=True
+
 STOCHASTICS=True
+
 ADX=True
+
 ROC=True
+
 BOLLINGER=True
+
 VWAP=True
+
 ICHIMOKU=True
 
+
 Weight（配点）
+
 WEIGHT_BASIC=2.0
+
 WEIGHT_EMA=1.0
 ...
 
@@ -169,8 +187,11 @@ WEIGHT_EMA=1.0
 セットアップ確認や初回実行では触る必要はありません。
 
 4-4. OpenAI / ニュース設定について
+
 OPENAI_MODEL=gpt-5
+
 NO_NEWS=false
+
 NO_OPENAI=false
 
 
@@ -181,9 +202,13 @@ NO_OPENAI=false
 --no-llm / --no-news を使えば env 側を触らずに制御可能
 
 4-5. ログ関連設定（後回しでOK）
+
 SAVE_TECHNICAL_LOG=false
+
 LOG_FORMAT=json
+
 LOG_DIR=log
+
 CSV_APPEND=false
 
 
@@ -305,23 +330,32 @@ Tickwise のベースディレクトリ
 API キーは 環境変数に設定せず、tickwise.env に置くことを推奨します。
 
 6-2. Windows（PowerShell）
+
 $env:TICKWISE_BASE_DIR="C:\tickwise"
+
 $env:TSE_LIST_FILE="C:\tickwise\data\tse_list.csv"
+
 $env:TICKWISE_LOG_DIR="C:\tickwise\logs"
 
 
 
 6-3. Windows（cmd.exe）
+
 set TICKWISE_BASE_DIR=C:\tickwise
+
 set TSE_LIST_FILE=C:\tickwise\data\tse_list.csv
+
 set TICKWISE_LOG_DIR=C:\tickwise\logs
 
 
 
 
 6-4. macOS / Linux（bash / zsh）
+
 export TICKWISE_BASE_DIR="$HOME/tickwise"
+
 export TSE_LIST_FILE="$HOME/tickwise/data/tse_list.csv"
+
 export TICKWISE_LOG_DIR="$HOME/tickwise/logs"
 
 
