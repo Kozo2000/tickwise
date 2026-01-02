@@ -141,36 +141,58 @@ tickwise.env は
 
 #===== API_KEY（必要な場合のみ設定） =====
 OPENAI_API_KEY=
+
 BRAVE_API_KEY=
 
 #===== テクニカル閾値（デフォルト） =====
 BUY_RSI=30.0
+
 SELL_RSI=70.0
+
 MACD_DIFF_LOW=2.0
+
 MACD_DIFF_MID=10.0
+
 MACD_MINUS_OK=false
 
 #===== 拡張テクニカル分析（すべて無効） =====
 EMA=false
+
 SMA=false
+
 FIBONACCI=false
+
 STOCHASTICS=false
+
 ADX=false
+
 ROC=false
+
 BOLLINGER=false
+
 VWAP=false
+
 ICHIMOKU=false
 
 #===== weight（主張しない） =====
 WEIGHT_BASIC=1.0
+
 WEIGHT_EMA=1.0
+
 WEIGHT_SMA=1.0
+
 WEIGHT_BOLLINGER=1.0
+
 WEIGHT_ROC=1.0
+
 WEIGHT_ADX=1.0
+
 WEIGHT_STOCHASTICS=1.0
+
 WEIGHT_FIBONACCI=1.0
+
 WEIGHT_VWAP=1.0
+
 WEIGHT_ICHIMOKU=1.0
 
 #===== 投資スタンス =====
@@ -178,19 +200,27 @@ STANCE=holder
 
 #===== ニュース・LLM（無効） =====
 NO_NEWS=true
+
 SHOW_NEWS=false
+
 NEWS_FILTER=false
+
 NO_LLM=true
 
 #===== ログ設定（必要最低限） =====
 SAVE_TECHNICAL_LOG=false
+
 LOG_FORMAT=csv
+
 LOG_DIR=log
+
 CSV_APPEND=false
+
 LOG_FLAT=false
 
 #===== その他 =====
 DEBUG_PROMPT=false
+
 ALIAS_CSV=data_j.csv
 
 ---
