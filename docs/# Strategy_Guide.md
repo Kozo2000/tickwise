@@ -499,6 +499,7 @@ JSON：プログラム連携向け
 JSON を標準出力に流すには --stdout-log が必要です。
 
 必要な項目だけ抽出する
+
 tickwise -t 9984.T \
   --no-llm \
   --save-technical-log \
@@ -508,6 +509,7 @@ tickwise -t 9984.T \
 | jq .
 
 しきい値判定（例：RSI が 30 以下だけ表示）
+
 tickwise -t 9984.T \
   --no-llm \
   --save-technical-log \
@@ -517,6 +519,7 @@ tickwise -t 9984.T \
 | jq 'select(.rsi <= 30)'
 
 複数銘柄を回して JSON Lines として蓄積する
+
 for t in 7203.T 9984.T 9433.T; do
   tickwise -t "$t" \
     --no-llm \
