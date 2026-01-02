@@ -360,7 +360,7 @@ tickwise -t AAPL --stance holder --roc --adx --weight-roc 2.5 --weight-adx 2.0
 - → 動き始めも含める
 - → 初動狙いになるがノイズも増える
 
-## 5.7 レンジ相場（Range Trading）
+## 5.4 レンジ相場（Range Trading）
 ### 目的
 
 方向感のない相場で行き過ぎだけを拾う。
@@ -397,7 +397,7 @@ tickwise -t 9433.T --stance holder --stochastics --bollinger --bb-bandwidth-sque
 - → かなり狭いレンジだけを対象
 - → 機会は減るが典型的なレンジになる
 
-## 5.4 価格帯重視（VWAP / Ichimoku）
+## 5.5 価格帯重視（VWAP / Ichimoku）
 ### 目的
 
 「高いか安いか」を価格帯で整理する。
@@ -430,14 +430,13 @@ tickwise -t 9984.T --stance holder --vwap --ichimoku --weight-vwap 2.0 --weight-
 位置関係のみを確認し、方向の決め打ちは行わない。
 
 
-### 5.5 複合レシピの考え方（上級）
+### 5.6 複合レシピの考え方（上級）
 - Tickwise のレシピは 排他的ではありません。
 
 
 例：
-- スクイーズ（5.4）↓
+- レンジ相場（Range Trading）↓
 - 逆張り（5.1）↓
-- ニュース確認（5.8）
 
 という 段階的利用が可能。
 
@@ -505,33 +504,16 @@ JSON を標準出力に流すには --stdout-log が必要です。
 
 必要な項目だけ抽出する
 
-tickwise -t 9984.T \
-  --no-llm \
-  --save-technical-log \
-  --stdout-log \
-  --log-format json \
-  --silent \
-| jq .
+tickwise -t 9984.T --no-llm --save-technical-log --stdout-log --log-format json --silent | jq .
 
 しきい値判定（例：RSI が 30 以下だけ表示）
 
-tickwise -t 9984.T \
-  --no-llm \
-  --save-technical-log \
-  --stdout-log \
-  --log-format json \
-  --silent \
-| jq 'select(.rsi <= 30)'
+tickwise -t 9984.T --no-llm --save-technical-log --stdout-log --log-format json --silent | jq 'select(.rsi <= 30)'
 
 複数銘柄を回して JSON Lines として蓄積する
 
-for t in 7203.T 9984.T 9433.T; do
-  tickwise -t "$t" \
-    --no-llm \
-    --save-technical-log \
-    --stdout-log \
-    --log-format json \
-    --silent
+for t in 7203.T 9984.T 9433.T; do \
+  tickwise -t "$t" --no-llm --save-technical-log --stdout-log --log-format json --silent \
 done >> tickwise-log.jsonl
 
 ---
