@@ -144,7 +144,8 @@ tickwise -t 9984.T \
   --macd-minus-ok \
   --macd-diff-low 1 \
   --bb-bandwidth-squeeze-pct 10
-意図
+
+#### 意図
 RSI による強い売られ過ぎ評価
 MACD マイナス圏でも反発兆候を許容
 ボリンジャーバンド収縮で反転余地を確認
