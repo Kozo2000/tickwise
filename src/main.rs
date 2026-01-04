@@ -932,9 +932,16 @@ fn initialize_environment_and_config() -> BuildCfgResult {
     }
 
     let config = build_config(&args);
+    //if config.debug_args {
+    //    eprintln!("Config= {}", mask_secrets(&format!("{:?}", config), &config));
+    //}
+
     if config.debug_args {
-        eprintln!("Config= {:?}", config);
+        // 呼び出し確認のため一時ログ（確認後は削除して良い）
+        eprintln!("DEBUG: initialize_environment_and_config -> about to call mask_secrets");
+        eprintln!("Config= {}", mask_secrets(&format!("{:?}", config), &config));    
     }
+
     // ✅ 以降は config.ticker を唯一のソース（SoT）
     let ticker = config.ticker.clone();
 
@@ -945,6 +952,22 @@ fn initialize_environment_and_config() -> BuildCfgResult {
     // 例: if let Some(code) = jp_code_from_ticker(&ticker) { ticker_name_map.insert(code, hardcoded.formal_name.to_string()); }
     // ハードコードされたティッカー名とクエリを追加
     Ok((config, ticker, ticker_name_map))
+}
+
+// 追加: 最小マスク関数（既知キーの完全一致をダミーに置換するだけ）
+fn mask_secrets(s: &str, cfg: &Config) -> String {
+    let mut out = s.to_string();
+    let k1 = cfg.openai_api_key.trim();
+    println!("k1={}", k1);
+    if !k1.is_empty() {
+        println!("Key1");
+        out = out.replace(k1, "<REDACTED_OPENAI_KEY>");
+    }
+    let k2 = cfg.brave_api_key.trim();
+    if !k2.is_empty() {
+        out = out.replace(k2, "<REDACTED_BRAVE_KEY>");
+    }
+    out
 }
 
 /// インデックスティッカーの変換
