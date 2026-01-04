@@ -4203,7 +4203,7 @@ async fn compose_llm_prompt_lines(
     lines.push("- 小数は原則2桁。桁飛び・丸め過ぎ・矛盾記述は禁止。".to_string());
     lines.push("- 指標の略称は禁止。例　BBはダメ。ボリンジャーバンドと正しく出力".to_string());
     lines.push("【記述順序ルール】".to_string());
-    lines.push("- 中期の反転条件は「EMA長期 → 一目基準線 → VWAP と Fib 38.2%（併記） → SMA長期」の順で列挙。".to_string());
+   lines.push("- 中期の反転条件は「EMA長期 → 一目基準線 → VWAP と Fib 38.2%（併記） → SMA長期」の順で列挙。".to_string());
     lines.push("- 短期シナリオは「SMA短期/EMA短期の回復 → Fib 50% → 一目転換線 → 一目基準線」を利確帯として段階記述。".to_string());
     lines.push("- 用語は「ボリンジャーバンド下限/上限」で統一（初出のみ正式名。以後は“BB下限/BB上限”略称可）。".to_string());
     lines.push(String::new());
