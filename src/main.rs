@@ -3,8 +3,8 @@ use chrono::TimeZone;
 use clap::Parser;
 use colored::*;
 use csv::ReaderBuilder;
-use dotenvy::from_filename;
-use dotenvy::from_path;
+// use dotenvy::from_filename;
+// use dotenvy::from_path;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -19,7 +19,10 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use ta::indicators::{BollingerBands, MovingAverageConvergenceDivergence, RelativeStrengthIndex};
 use ta::Next;
-use tempfile::NamedTempFile; // JSON用
+
+use zeroize::Zeroizing; // ← 追加
+use zeroize::Zeroize;
+
 
 type BuildCfgResult = Result<(Config, String, HashMap<String, String>), Box<dyn std::error::Error>>;
 const EMA_EQ_EPS: f64 = 0.01; // 短期-長期の絶対差が±0.01未満なら「同値圏」
@@ -867,9 +870,109 @@ fn resolve_hardcoded_info(ticker: &str) -> Option<HardcodedInfo> {
         _ => None,
     }
 }
-
+/* 
 fn initialize_environment_and_config() -> BuildCfgResult {
-    // ✅ 環境変数の読み込み（tickwise.env ファイル）
+/*/    // ✅ 環境変数の読み込み（tickwise.env ファイル）
+   let env_path = Path::new("tickwise.env");
+    if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
+        // Disk に平文を残さず in-memory で手動パースして環境変数にセットする
+        let content = lines.join("\n");
+        for raw in content.lines() {
+            let line = raw.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some(idx) = line.find('=') {
+                let key = line[..idx].trim();
+                let mut val = line[idx + 1..].trim().to_string();
+                // "quoted" 値を剥がす
+                if val.len() >= 2 && val.starts_with('"') && val.ends_with('"') {
+                    val = val[1..val.len() - 1].to_string();
+                }
+                if !key.is_empty() {
+                    std::env::set_var(key, val);
+                }
+            }
+        }
+    }
+
+    let mut args = Args::parse();
+
+    // ✅ show-log-header モード専用ルート
+    if args.show_log_header {
+        let config = build_config(&args);
+        generate_csv_header(&config);
+        std::process::exit(0);
+    }
+*/
+    let env_path = Path::new("tickwise.env");
+    match sanitize_ascii_file_lines(env_path) {
+        Ok(lines) => {
+            let content = lines.join("\n");
+            for raw in content.lines() {
+                let mut line = raw.trim().to_string();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                // export プレフィックスを許容
+                if let Some(rest) = line.strip_prefix("export ") {
+                    line = rest.trim().to_string();
+                }
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(idx) = line.find('=') {
+                    let key = line[..idx].trim();
+                    let raw_val = line[idx + 1..].trim();
+                    let val = if raw_val.starts_with('"') {
+                        // ダブルクォートあり：可能な限り引用内をそのまま採用
+                        if raw_val.len() >= 2 && raw_val.ends_with('"') {
+                            raw_val[1..raw_val.len() - 1].to_string()
+                        } else if let Some(pos) = raw_val.rfind('"') {
+                            raw_val[1..pos].to_string()
+                        } else {
+                            raw_val.trim_matches('"').to_string()
+                        }
+                    } else {
+                        // 非クォート値：行内コメント(#)を除去（簡易ルール）
+                        if let Some(pound) = raw_val.find('#') {
+                            raw_val[..pound].trim_end().to_string()
+                        } else {
+                            raw_val.to_string()
+                        }
+                    };
+                    if !key.is_empty() {
+                        std::env::set_var(key, val);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("⚠️ tickwise.env の読み込み/サニタイズに失敗しました（無視されます）: {}", e);
+        }
+    }
+
+    let mut args = Args::parse();
+
+    // show-log-header モード専用ルート（ここだけに一本化）
+    /* 
+    if args.show_log_header {
+        let config = build_config(&args);
+        generate_csv_header(&config);
+        std::process::exit(0);
+    }
+
+    // ✅ ticker の必須チェック
+    let raw_ticker = match args.ticker {
+        Some(ref t) => t.clone(),
+        None => {
+            eprintln!("❌ --ticker は必須です");
+            std::process::exit(1);
+        }
+    };
+    */
+    
+    /* 
     let env_path = Path::new("tickwise.env");
     if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
         if let Ok(mut tmpfile) = NamedTempFile::new() {
@@ -886,7 +989,7 @@ fn initialize_environment_and_config() -> BuildCfgResult {
     }
 
     let mut args = Args::parse();
-
+*/
     // ✅ show-log-header モード専用ルート
     if args.show_log_header {
         let config = build_config(&args);
@@ -938,7 +1041,6 @@ fn initialize_environment_and_config() -> BuildCfgResult {
 
     if config.debug_args {
         // 呼び出し確認のため一時ログ（確認後は削除して良い）
-        eprintln!("DEBUG: initialize_environment_and_config -> about to call mask_secrets");
         eprintln!("Config= {}", mask_secrets(&format!("{:?}", config), &config));    
     }
 
@@ -953,14 +1055,362 @@ fn initialize_environment_and_config() -> BuildCfgResult {
     // ハードコードされたティッカー名とクエリを追加
     Ok((config, ticker, ticker_name_map))
 }
+*/
+// ...existing code...
+
+fn initialize_environment_and_config() -> BuildCfgResult {
+    // 方針：tickwise.env を読み込み一般設定は env にセットするが、
+    // セキュリティ上 API キー（OPENAI_API_KEY / BRAVE_API_KEY）はここでセットしない。
+    let env_path = Path::new("tickwise.env");
+    match sanitize_ascii_file_lines(env_path) {
+        Ok(lines) => {
+            let content = lines.join("\n");
+            for raw in content.lines() {
+                let mut line = raw.trim().to_string();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(rest) = line.strip_prefix("export ") {
+                    line = rest.trim().to_string();
+                }
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(idx) = line.find('=') {
+                    let key = line[..idx].trim();
+                    // セキュリティ方針：APIキーはここで永続的にセットしない（送信直前に参照）。
+                    if key.eq_ignore_ascii_case("OPENAI_API_KEY")
+                        || key.eq_ignore_ascii_case("BRAVE_API_KEY")
+                    {
+                        continue;
+                    }
+                    let raw_val = line[idx + 1..].trim();
+                    let val = if raw_val.starts_with('"') {
+                        if raw_val.len() >= 2 && raw_val.ends_with('"') {
+                            raw_val[1..raw_val.len() - 1].to_string()
+                        } else if let Some(pos) = raw_val.rfind('"') {
+                            raw_val[1..pos].to_string()
+                        } else {
+                            raw_val.trim_matches('"').to_string()
+                        }
+                    } else if let Some(pound) = raw_val.find('#') {
+                        raw_val[..pound].trim_end().to_string()
+                    } else {
+                        raw_val.to_string()
+                    };
+                    if !key.is_empty() {
+                        std::env::set_var(key, val);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("⚠️ tickwise.env の読み込み/サニタイズに失敗しました（無視されます）: {}", e);
+        }
+    }
+
+    // 以下は既存処理（args 解析, build_config 等）
+    let mut args = Args::parse();
+
+    if args.show_log_header {
+        let config = build_config(&args);
+        generate_csv_header(&config);
+        std::process::exit(0);
+    }
+
+    let raw_ticker = match args.ticker {
+        Some(ref t) => t.clone(),
+        None => {
+            eprintln!("❌ --ticker は必須です");
+            std::process::exit(1);
+        }
+    };
+
+    args.ticker = Some(sanitize_ticker(&raw_ticker).unwrap_or_else(|err| {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }));
+    args.ticker = Some(normalize_ticker_input(args.ticker.as_deref().unwrap_or("")));
+    args.ticker = Some(normalize_ticker(args.ticker.as_deref().unwrap_or("")));
+
+    if let Some(q) = &args.custom_news_query {
+        args.custom_news_query = Some(sanitize_news_query(q).unwrap_or_else(|err| {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }));
+    }
+    if let Some(n) = &args.openai_extra_note {
+        args.openai_extra_note = Some(sanitize_llm_note(n).unwrap_or_else(|err| {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }));
+    }
+
+    let config = build_config(&args);
+    if let Some(s) = args.openai_api_key.as_mut() {
+        s.zeroize();
+        s.clear();
+    }
+    if let Some(s) = args.brave_api_key.as_mut() {
+        s.zeroize();
+        s.clear();
+    }
+
+
+    if config.debug_args {
+        eprintln!("Config= {}", config_debug_string(&config));
+    }
+
+    let ticker = config.ticker.clone();
+
+    let ticker_name_map = match &config.alias_csv {
+        Some(csv_path) => load_alias_csv(csv_path)?,
+        None => HashMap::new(),
+    };
+
+    Ok((config, ticker, ticker_name_map))
+}
+
+
+// ...existing code...
+/* 
+async fn news_flow_controller(
+    guard: &TechnicalDataGuard,
+    config: &Config,
+) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
+    // Braveキー優先: CLI(config) -> tickwise.env（送信直前参照）
+    let brave_key_candidate = if !config.brave_api_key.trim().is_empty() {
+        Some(config.brave_api_key.clone())
+    } else {
+        None
+    };
+
+    let articles: Vec<Article> = if let Some(k) = brave_key_candidate {
+        // CLIキーがある場合はそれを使う（ゼロ化のため Zeroizing で包む）
+        let key_owned = Zeroizing::new(k);
+        let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
+        drop(key_owned);
+        fetched
+    } else {
+        // CLI に無い場合は tickwise.env を直前に参照
+        let mut found: Option<String> = None;
+        let env_path = Path::new("tickwise.env");
+        if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
+            for raw in lines {
+                let mut line = raw.trim().to_string();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(rest) = line.strip_prefix("export ") {
+                    line = rest.trim().to_string();
+                }
+                if let Some(idx) = line.find('=') {
+                    let k = line[..idx].trim();
+                    if k.eq_ignore_ascii_case("BRAVE_API_KEY") {
+                        let raw_val = line[idx + 1..].trim();
+                        let v = if raw_val.starts_with('"') {
+                            if raw_val.len() >= 2 && raw_val.ends_with('"') {
+                                raw_val[1..raw_val.len() - 1].to_string()
+                            } else if let Some(pos) = raw_val.rfind('"') {
+                                raw_val[1..pos].to_string()
+                            } else {
+                                raw_val.trim_matches('"').to_string()
+                            }
+                        } else if let Some(pound) = raw_val.find('#') {
+                            raw_val[..pound].trim_end().to_string()
+                        } else {
+                            raw_val.to_string()
+                        };
+                        found = Some(v);
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(k) = found {
+            let key_owned = Zeroizing::new(k);
+            let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
+            drop(key_owned);
+            fetched
+        } else {
+            Vec::new()
+        }
+    };
+
+    let lines = compose_news_lines(guard, config, &articles);
+    if config.show_news {
+        let brave_key_missing = config.brave_api_key.trim().is_empty();
+        if brave_key_missing {
+            println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
+        } else {
+            print_lines_to_terminal(&lines);
+        }
+    }
+    Ok(articles)
+}
+*/
+/* 
+async fn news_flow_controller(
+    guard: &TechnicalDataGuard,
+    config: &Config,
+) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
+    // Braveキー優先: CLI(config) -> tickwise.env（送信直前参照）
+    let brave_key_candidate = if !config.brave_api_key.trim().is_empty() {
+        Some(config.brave_api_key.clone())
+    } else {
+        None
+    };
+
+    let articles: Vec<Article> = if let Some(k) = brave_key_candidate {
+        // CLIキーがある場合はそれを使う（ゼロ化のため Zeroizing で包む）
+        let key_owned = Zeroizing::new(k);
+        let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
+        drop(key_owned);
+        fetched
+    } else {
+        // CLI に無い場合は tickwise.env を直前に参照
+        let mut found: Option<String> = None;
+        let env_path = Path::new("tickwise.env");
+        if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
+            for raw in lines {
+                let mut line = raw.trim().to_string();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(rest) = line.strip_prefix("export ") {
+                    line = rest.trim().to_string();
+                }
+                if let Some(idx) = line.find('=') {
+                    let k = line[..idx].trim();
+                    if k.eq_ignore_ascii_case("BRAVE_API_KEY") {
+                        let raw_val = line[idx + 1..].trim();
+                        let v = if raw_val.starts_with('"') {
+                            if raw_val.len() >= 2 && raw_val.ends_with('"') {
+                                raw_val[1..raw_val.len() - 1].to_string()
+                            } else if let Some(pos) = raw_val.rfind('"') {
+                                raw_val[1..pos].to_string()
+                            } else {
+                                raw_val.trim_matches('"').to_string()
+                            }
+                        } else if let Some(pound) = raw_val.find('#') {
+                            raw_val[..pound].trim_end().to_string()
+                        } else {
+                            raw_val.to_string()
+                        };
+                        found = Some(v);
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(k) = found {
+            let key_owned = Zeroizing::new(k);
+            let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
+            drop(key_owned);
+            fetched
+        } else {
+            Vec::new()
+        }
+    };
+
+    let lines = compose_news_lines(guard, config, &articles);
+    if config.show_news {
+        let brave_key_missing = config.brave_api_key.trim().is_empty();
+        if brave_key_missing {
+            println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
+        } else {
+            print_lines_to_terminal(&lines);
+        }
+    }
+    Ok(articles)
+}
+*/
+
+// ...existing code...
+async fn news_flow_controller(
+    guard: &TechnicalDataGuard,
+    config: &Config,
+) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
+    // 1) CLI のキーを優先
+    if !config.brave_api_key.trim().is_empty() {
+        let key_owned = Zeroizing::new(config.brave_api_key.clone());
+        let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
+        drop(key_owned);
+        let lines = compose_news_lines(guard, config, &fetched);
+        if config.show_news {
+            print_lines_to_terminal(&lines);
+        }
+        return Ok(fetched);
+    }
+
+    // 2) CLI に無ければ tickwise.env を直前に堅牢に参照
+    let env_path = Path::new("tickwise.env");
+    let mut found_key: Option<String> = None;
+    if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
+        for raw in lines {
+            let mut line = raw.trim().to_string();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some(rest) = line.strip_prefix("export ") {
+                line = rest.trim().to_string();
+            }
+            if let Some(idx) = line.find('=') {
+                let k = line[..idx].trim();
+                if k.eq_ignore_ascii_case("BRAVE_API_KEY") {
+                    let raw_val = line[idx + 1..].trim();
+                    let v = if raw_val.starts_with('"') {
+                        if raw_val.len() >= 2 && raw_val.ends_with('"') {
+                            raw_val[1..raw_val.len() - 1].to_string()
+                        } else if let Some(pos) = raw_val.rfind('"') {
+                            raw_val[1..pos].to_string()
+                        } else {
+                            raw_val.trim_matches('"').to_string()
+                        }
+                    } else if let Some(pound) = raw_val.find('#') {
+                        raw_val[..pound].trim_end().to_string()
+                    } else {
+                        raw_val.to_string()
+                    };
+                    if !v.is_empty() {
+                        found_key = Some(v);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    let articles: Vec<Article> = if let Some(k) = found_key {
+        let key_owned = Zeroizing::new(k);
+        let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
+        drop(key_owned);
+        fetched
+    } else {
+        Vec::new()
+    };
+
+    let lines = compose_news_lines(guard, config, &articles);
+    if config.show_news {
+        if articles.is_empty() {
+            println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
+        } else {
+            print_lines_to_terminal(&lines);
+        }
+    }
+    Ok(articles)
+}
+// ...existing code...
+
+
+// ...existing code...
 
 // 追加: 最小マスク関数（既知キーの完全一致をダミーに置換するだけ）
+/* 
 fn mask_secrets(s: &str, cfg: &Config) -> String {
     let mut out = s.to_string();
     let k1 = cfg.openai_api_key.trim();
-    println!("k1={}", k1);
     if !k1.is_empty() {
-        println!("Key1");
         out = out.replace(k1, "<REDACTED_OPENAI_KEY>");
     }
     let k2 = cfg.brave_api_key.trim();
@@ -968,6 +1418,24 @@ fn mask_secrets(s: &str, cfg: &Config) -> String {
         out = out.replace(k2, "<REDACTED_BRAVE_KEY>");
     }
     out
+}
+*/
+
+
+// 追加: debug 出力用（キーを露出しない、安全な表現を返す）
+fn config_debug_string(cfg: &Config) -> String {
+    let mut tmp = cfg.clone();
+    tmp.openai_api_key = if tmp.openai_api_key.trim().is_empty() {
+        "<UNSET>".to_string()
+    } else {
+        "<REDACTED_OPENAI_KEY>".to_string()
+    };
+    tmp.brave_api_key = if tmp.brave_api_key.trim().is_empty() {
+        "<UNSET>".to_string()
+    } else {
+        "<REDACTED_BRAVE_KEY>".to_string()
+    };
+    format!("{:?}", tmp)
 }
 
 /// インデックスティッカーの変換
@@ -3738,6 +4206,7 @@ struct Article {
 // 取得だけに専念し、整形は compose_news_lines、出力は print_lines_to_terminal に委譲
 
 // --- 修正：収集→整形→出力しつつ、Vec<Article> を返す ---
+/* 
 async fn news_flow_controller(
     guard: &TechnicalDataGuard,
     config: &Config,
@@ -3773,6 +4242,7 @@ async fn news_flow_controller(
     }
     Ok(articles)
 }
+*/
 
 // ===== 1) 検索ワード加工：ログ用の1行（SoTはここ） =====
 fn build_news_query_line_for_log(guard: &TechnicalDataGuard, config: &Config) -> String {
@@ -4143,14 +4613,54 @@ async fn compose_llm_prompt_lines(
         "対象が0件なら『株価に関係する評価対象ニュースはありません』と 1 行だけ記載。".to_string();
 
     if !config.no_news {
+        // 判定は config.brave_api_key ではなく、実際に渡された news_articles の状態で行う
+        match news_articles {
+            None => {
+                // 外部取得が呼ばれたが失敗したケース（呼び出し側が None を渡した）
+                lines.push("【注記】ニュース取得に失敗したためスキップ。".to_string());
+                lines.push(String::new());
+                news_task_directive =
+                    "この実行ではニュース取得に失敗しスキップ。ニュース節には『取得失敗によりスキップ』と 1 行だけ記載。"
+                        .to_string();
+            }
+            Some(slice) if slice.is_empty() => {
+                // 正常に呼ばれ、該当記事がゼロ件だったケース
+                lines.push("【注記】対象期間に該当ニュースなし。".to_string());
+                lines.push(String::new());
+                news_task_directive =
+                    "対象が0件なら『株価に関係する評価対象ニュースはありません』と 1 行だけ記載。"
+                        .to_string();
+            }
+            Some(slice) => {
+                // 記事が実際にある場合はそのまま埋め込む（.env 由来で取得できていればここに来る）
+                let news_lines = compose_news_lines(guard, config, slice);
+                lines.extend(news_lines);
+                lines.push(String::new());
+                news_task_directive =
+                    "以下の見出し群を、\
+                    Tier A（一次性・数量性・直接性・近接性・信頼性が高い）/ \
+                    Tier B（中）/ Tier C（低＝論評・再掲など）に仕分ける。\
+                    各記事に対し、価格影響度（高/中/低/微小）を判定。\
+                    Tier A/B は必ず列挙し、影響度が『低/微小』でも \
+                    『ニュース価値は高いが価格影響は軽微（理由：金額相対小/反映が遠い/既報の焼き直し等）』と 1 行で明記。\
+                    Tier C は“参考（価格影響なし）”として最大3件まで、非採用理由を 1 語（再掲/論評/一次性なし 等）で添える。\
+                    新規数値の創作は禁止。"
+                        .to_string();
+            }
+        }
+     
+        /* 
         let brave_key_missing = config.brave_api_key.trim().is_empty();
 
         if brave_key_missing {
-            lines.push("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。".to_string());
-            lines.push(String::new());
+           // lines.push("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。".to_string());
+           // lines.push(String::new());
+           // news_task_directive =
+           //     "この実行ではニュース検索をスキップ。ニュース節には『ニュース検索をスキップ』と 1 行だけ記載。"
+            //        .to_string();
+        // 注記は 4) の括弧内で短く示す（重複行を避ける）
             news_task_directive =
-                "この実行ではニュース検索をスキップ。ニュース節には『ニュース検索をスキップ』と 1 行だけ記載。"
-                    .to_string();
+                "ニュース検索はスキップ（BRAVE_API_KEY 未設定）".to_string();    
         } else {
             match news_articles {
                 None => {
@@ -4181,6 +4691,8 @@ async fn compose_llm_prompt_lines(
                 }
             }
         }
+        */
+
     }
 
     lines.push("【タスク】".to_string());
@@ -4241,6 +4753,7 @@ async fn compose_llm_prompt_lines(
 }
 
 // --- OpenAI送信（キー未設定はヒント表示で優しくスキップ） ---
+/* 
 async fn openai_send_prompt(
     config: &Config,
     prompt: &str,
@@ -4302,6 +4815,104 @@ async fn openai_send_prompt(
     println!("{}", content);
     Ok(())
 }
+*/
+async fn openai_send_prompt(
+    config: &Config,
+    prompt: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if config.no_llm || config.llm_provider.trim() != "openai" {
+        return Ok(());
+    }
+
+    // 優先順位: 1) CLI (config.openai_api_key) 2) tickwise.env ファイルの OPENAI_API_KEY
+    let mut key_candidate = if !config.openai_api_key.trim().is_empty() {
+        config.openai_api_key.trim().to_string()
+    } else {
+        String::new()
+    };
+
+    if key_candidate.trim().is_empty() {
+        let env_path = Path::new("tickwise.env");
+        if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
+            for raw in lines {
+                let mut line = raw.trim().to_string();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(rest) = line.strip_prefix("export ") {
+                    line = rest.trim().to_string();
+                }
+                if let Some(idx) = line.find('=') {
+                    let k = line[..idx].trim();
+                    if k.eq_ignore_ascii_case("OPENAI_API_KEY") {
+                        let raw_val = line[idx + 1..].trim();
+                        key_candidate = if raw_val.starts_with('"') {
+                            if raw_val.len() >= 2 && raw_val.ends_with('"') {
+                                raw_val[1..raw_val.len() - 1].to_string()
+                            } else if let Some(pos) = raw_val.rfind('"') {
+                                raw_val[1..pos].to_string()
+                            } else {
+                                raw_val.trim_matches('"').to_string()
+                            }
+                        } else if let Some(pound) = raw_val.find('#') {
+                            raw_val[..pound].trim_end().to_string()
+                        } else {
+                            raw_val.to_string()
+                        };
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if key_candidate.trim().is_empty() {
+        eprintln!("⚠️ OpenAI APIキーが未設定のため送信をスキップしました。");
+        return Ok(());
+    }
+
+    // 送信直前に Zeroizing でラップし、送信後に drop してゼロ化
+    let openai_key = Zeroizing::new(key_candidate);
+    let client = reqwest::Client::new();
+    let res = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .bearer_auth(&*openai_key)
+        .json(&serde_json::json!({
+            "model": config.openai_model,
+            "messages": [{ "role": "user", "content": prompt }],
+        }))
+        .send()
+        .await?;
+
+    if !res.status().is_success() {
+        let status = res.status();
+        let body = res.text().await.unwrap_or_default();
+        match status.as_u16() {
+            400 => eprintln!("❌ 不正なリクエスト(400)。モデル名やパラメータを確認してください。"),
+            401 => eprintln!("❌ 認証エラー(401)。APIキーが不正/期限切れの可能性。"),
+            403 => eprintln!("⛔ アクセス拒否(403)。権限不足または機能が無効化。"),
+            429 => eprintln!("⏳ レート制限(429)。時間を置いて再実行してください。"),
+            500..=599 => eprintln!(
+                "🛠️ 一時的な障害({}).時間を置いて再試行してください。",
+                status
+            ),
+            _ => eprintln!("❌ リクエスト失敗({}): {}", status, body),
+        }
+        return Err(format!("OpenAI request failed: {}", status).into());
+    }
+
+    let json: serde_json::Value = res.json().await?;
+    let content = json["choices"]
+        .get(0)
+        .and_then(|c| c["message"]["content"].as_str())
+        .ok_or("OpenAI APIのレスポンス形式が不正です")?;
+    println!("\n=== LLM Response  by {} ===\n", config.openai_model);
+    println!("{}", content);
+
+    drop(openai_key); // 明示的ゼロ化
+
+    Ok(())
+}
 
 // プロンプトを debug_prompt.txt に保存（短い版）
 fn save_prompt_to_file(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -4314,9 +4925,11 @@ fn save_prompt_to_file(prompt: &str) -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    from_filename("tickwise.env").ok();
+//    from_filename("tickwise.env").ok();
+// from_filename は呼ばない：initialize_environment_and_config() 内で
+// tickwise.env をメモリ展開して環境変数に注入する方針に統一
 
-    // ✅ 初期化（設定・キー・CSVエイリアス）
+// ✅ 初期化（設定・キー・CSVエイリアス）
     let (config, ticker, ticker_name_map) = initialize_environment_and_config()?;
 
     // ✅ 株価データ取得
