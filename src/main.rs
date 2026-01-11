@@ -1736,7 +1736,6 @@ async fn fetch_market_data(
         }
     };
     
-
     let timestamps = r0["timestamp"]
         .as_array()
         .ok_or("❌ timestamp がありません。")?;
@@ -1758,7 +1757,7 @@ async fn fetch_market_data(
             Some(v) => v,
             None => continue,
         };
-
+        
         let (h, l, c) = (highs[i].as_f64(), lows[i].as_f64(), closes[i].as_f64());
         if let (Some(h), Some(l), Some(c)) = (h, l, c) {
             // 取引所のIANAタイムゾーン名（exchangeTimezoneName）を取得し、表示に使うTZを確定する
@@ -1780,6 +1779,31 @@ async fn fetch_market_data(
                 close: c,
                 name: None,
             });
+        }
+    }
+
+    // metaの最新値（価格/時刻）で、最後の足を上書きして「リクエスト時点の最新値」を出せるようにする
+    let rm_time = r0["meta"]["regularMarketTime"].as_i64();
+
+    // regularMarketPrice は number の場合と {raw: ...} の場合があるので両対応
+    let rm_price = r0["meta"]["regularMarketPrice"]
+        .as_f64()
+        .or_else(|| r0["meta"]["regularMarketPrice"]["raw"].as_f64());
+
+    if let (Some(rm_time), Some(rm_price)) = (rm_time, rm_price) {
+        if let Some(last) = out.last_mut() {
+            let dt = tz
+                .timestamp_opt(rm_time, 0)
+                .single()
+                .ok_or("❌ regularMarketTime 変換失敗")?;
+
+            last.date = dt.format("%Y-%m-%d").to_string();
+            last.datetime = Some(dt.format("%Y-%m-%d %H:%M").to_string());
+            last.timestamp = Some(rm_time);
+            last.timezone = Some(tz_name.clone());
+
+            // close を “最新価格” に差し替える
+            last.close = rm_price;
         }
     }
 
@@ -4497,50 +4521,6 @@ async fn compose_llm_prompt_lines(
             }
         }
      
-        /* 
-        let brave_key_missing = config.brave_api_key.trim().is_empty();
-
-        if brave_key_missing {
-           // lines.push("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。".to_string());
-           // lines.push(String::new());
-           // news_task_directive =
-           //     "この実行ではニュース検索をスキップ。ニュース節には『ニュース検索をスキップ』と 1 行だけ記載。"
-            //        .to_string();
-        // 注記は 4) の括弧内で短く示す（重複行を避ける）
-            news_task_directive =
-                "ニュース検索はスキップ（BRAVE_API_KEY 未設定）".to_string();    
-        } else {
-            match news_articles {
-                None => {
-                    lines.push("【注記】ニュース取得に失敗したためスキップ。".to_string());
-                    lines.push(String::new());
-                    news_task_directive =
-                        "この実行ではニュース取得に失敗しスキップ。ニュース節には『取得失敗によりスキップ』と 1 行だけ記載。"
-                            .to_string();
-                }
-                Some([]) => {
-                    lines.push("【注記】対象期間に該当ニュースなし。".to_string());
-                    lines.push(String::new());
-                }
-                Some(slice) => {
-                    let news_lines = compose_news_lines(guard, config, slice);
-                    lines.extend(news_lines);
-                    lines.push(String::new());
-                    news_task_directive =
-                        "以下の見出し群を、\
-                        Tier A（一次性・数量性・直接性・近接性・信頼性が高い）/ \
-                        Tier B（中）/ Tier C（低＝論評・再掲など）に仕分ける。\
-                        各記事に対し、価格影響度（高/中/低/微小）を判定。\
-                        Tier A/B は必ず列挙し、影響度が『低/微小』でも \
-                        『ニュース価値は高いが価格影響は軽微（理由：金額相対小/反映が遠い/既報の焼き直し等）』と 1 行で明記。\
-                        Tier C は“参考（価格影響なし）”として最大3件まで、非採用理由を 1 語（再掲/論評/一次性なし 等）で添える。\
-                        新規数値の創作は禁止。"
-                            .to_string();
-                }
-            }
-        }
-        */
-
     }
 
     lines.push("【タスク】".to_string());
@@ -4568,8 +4548,8 @@ async fn compose_llm_prompt_lines(
         "- 上のテクニカル出力の数値のみを根拠として使用。未提示の価格や新規数値の創作は禁止。"
             .to_string(),
     );
-    lines.push("- レンジ/目安は、提示された水準（終値/EMA/SMA/VWAP/ボリ下限上限/フィボ各値）からのみ導出。".to_string());
-    lines.push("- オシレーター用語は厳密に：RSI<30/ストキャス%K<20=売られすぎ、RSI>70/％K>80=買われすぎ。逆転表現は禁止。".to_string());
+    lines.push("- レンジ/目安は、提示された水準からのみ導出。".to_string());
+    //lines.push("- オシレーター用語は厳密に：RSI<30/ストキャス%K<20=売られすぎ、RSI>70/％K>80=買われすぎ。逆転表現は禁止。".to_string());
     let macd = guard.get_macd();
     let signal = guard.get_signal();
     let macd_policy = match (config.macd_minus_ok, macd < 0.0 && macd > signal) {
@@ -4584,7 +4564,7 @@ async fn compose_llm_prompt_lines(
     );
     lines.push("- 少なくとも2つのシナリオ（例：短期反発/続落/レンジ）を提示し、各々「条件→行動（エントリー/撤退/利確帯）」を具体化。".to_string());
     lines.push("- 小数は原則2桁。桁飛び・丸め過ぎ・矛盾記述は禁止。".to_string());
-    lines.push("- 指標の略称は禁止。例　BBはダメ。ボリンジャーバンドと正しく出力".to_string());
+    lines.push("- 誰にも分かりやすくするため指標の略称は禁止。例えば、ボリンジャーバンドと正しく出力し、”BB”というように略称を使わないこと".to_string());
     lines.push("【記述順序ルール】".to_string());
     lines.push("- 短期、中期の反転条件の順で共に与えられた各種指標の中で条件を想定し説明してください".to_string());
     lines.push(String::new());
