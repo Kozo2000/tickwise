@@ -1,10 +1,6 @@
-use chrono::Local;
-use chrono::TimeZone;
 use clap::Parser;
 use colored::*;
 use csv::ReaderBuilder;
-// use dotenvy::from_filename;
-// use dotenvy::from_path;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -19,10 +15,10 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use ta::indicators::{BollingerBands, MovingAverageConvergenceDivergence, RelativeStrengthIndex};
 use ta::Next;
-
 use zeroize::Zeroizing; // ← 追加
 use zeroize::Zeroize;
-
+use chrono::TimeZone;
+use chrono_tz::Tz;
 
 type BuildCfgResult = Result<(Config, String, HashMap<String, String>), Box<dyn std::error::Error>>;
 const EMA_EQ_EPS: f64 = 0.01; // 短期-長期の絶対差が±0.01未満なら「同値圏」
@@ -41,8 +37,14 @@ struct Args {
     ticker: Option<String>,
     #[arg(
         long,
-        help = "Specify your own API key (if not using environment variable)"
+        help = "Do NOT read indicator/scoring-related settings from tickwise.env (thresholds/extensions/stance/weights)."
     )]
+  #[arg(
+        short = 'I',
+        long,
+        help = "Do NOT read indicator/scoring-related settings from tickwise.env (thresholds/extensions/stance/weights)."
+    )]
+    no_env_indicators: bool,
     openai_api_key: Option<String>,
     #[arg(
         long,
@@ -371,6 +373,7 @@ impl std::fmt::Display for Stance {
 /// 設定情報
 #[derive(Debug, Clone)]
 struct Config {
+    no_env_indicators: bool,
     buy_rsi: f64,
     sell_rsi: f64,
     macd_diff_low: f64,
@@ -425,12 +428,17 @@ struct Config {
 #[derive(Debug, Deserialize, Clone)]
 struct MarketData {
     date: String,
-    //    open: f64,
+    #[serde(default)]
+    datetime: Option<String>,
+    #[serde(default)]
+    timestamp: Option<i64>,
+    #[serde(default)]
+    timezone: Option<String>, // 追加: IANA TZ (exchangeTimezoneName)
     high: f64,
     low: f64,
     close: f64,
     #[serde(default)]
-    name: Option<String>, // MarketStackから取得できる場合に備える
+    name: Option<String>,
 }
 
 /// ハードコードされた正式名称とクエリを保持する構造体
@@ -458,6 +466,9 @@ struct TechnicalDataEntry {
     ticker: String,                 // ティッカー記号（例: AAPL, MSFT, 7203.T）
     name: String,                   // 企業名（例: NVIDIA Corp、ソフトバンク）
     date: String,                   // データ日付（例: 2025-05-09）
+    datetime: Option<String>,       // データ日時（例: 2025-05-09T15:30:00Z）
+    timestamp: Option<i64>,         // データタイムスタンプ（UNIX時間）
+    timezone: String,               // IANA TZ (exchangeTimezoneName)
     close: f64,                     // 終値
     previous_close: f64,            // 前日終値
     price_diff: f64,                // 前日比（差額）
@@ -510,6 +521,9 @@ impl TechnicalDataGuard {
                 ticker,
                 name: String::new(),
                 date,
+                datetime: None,
+                timestamp: None,
+                timezone: "UTC".to_string(), // 追加（未取得時の既定）
                 close: 0.0,
                 previous_close: 0.0,
                 price_diff: 0.0,
@@ -552,6 +566,15 @@ impl TechnicalDataGuard {
     }
     fn set_name(&mut self, value: &str) {
         self.entry.name = value.to_string();
+    }
+    fn set_datetime(&mut self, value: &str) {
+        self.entry.datetime = Some(value.to_string());
+    }
+    fn set_timestamp(&mut self, value: i64) {
+        self.entry.timestamp = Some(value);
+    }
+    fn set_timezone(&mut self, value: &str) {
+        self.entry.timezone = value.to_string();
     }
     fn set_close(&mut self, value: f64) {
         self.entry.close = value;
@@ -667,6 +690,15 @@ impl TechnicalDataGuard {
     /// get関数
     fn get_name(&self) -> &str {
         &self.entry.name
+    }
+    fn get_datetime(&self) -> Option<&str> {
+        self.entry.datetime.as_deref()
+    }
+    fn get_timestamp(&self) -> Option<i64> {
+        self.entry.timestamp
+    }
+    fn get_timezone(&self) -> &str {
+        &self.entry.timezone
     }
     fn get_ticker(&self) -> &str {
         &self.entry.ticker
@@ -870,194 +902,8 @@ fn resolve_hardcoded_info(ticker: &str) -> Option<HardcodedInfo> {
         _ => None,
     }
 }
-/* 
-fn initialize_environment_and_config() -> BuildCfgResult {
-/*/    // ✅ 環境変数の読み込み（tickwise.env ファイル）
-   let env_path = Path::new("tickwise.env");
-    if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
-        // Disk に平文を残さず in-memory で手動パースして環境変数にセットする
-        let content = lines.join("\n");
-        for raw in content.lines() {
-            let line = raw.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            if let Some(idx) = line.find('=') {
-                let key = line[..idx].trim();
-                let mut val = line[idx + 1..].trim().to_string();
-                // "quoted" 値を剥がす
-                if val.len() >= 2 && val.starts_with('"') && val.ends_with('"') {
-                    val = val[1..val.len() - 1].to_string();
-                }
-                if !key.is_empty() {
-                    std::env::set_var(key, val);
-                }
-            }
-        }
-    }
 
-    let mut args = Args::parse();
-
-    // ✅ show-log-header モード専用ルート
-    if args.show_log_header {
-        let config = build_config(&args);
-        generate_csv_header(&config);
-        std::process::exit(0);
-    }
-*/
-    let env_path = Path::new("tickwise.env");
-    match sanitize_ascii_file_lines(env_path) {
-        Ok(lines) => {
-            let content = lines.join("\n");
-            for raw in content.lines() {
-                let mut line = raw.trim().to_string();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                // export プレフィックスを許容
-                if let Some(rest) = line.strip_prefix("export ") {
-                    line = rest.trim().to_string();
-                }
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                if let Some(idx) = line.find('=') {
-                    let key = line[..idx].trim();
-                    let raw_val = line[idx + 1..].trim();
-                    let val = if raw_val.starts_with('"') {
-                        // ダブルクォートあり：可能な限り引用内をそのまま採用
-                        if raw_val.len() >= 2 && raw_val.ends_with('"') {
-                            raw_val[1..raw_val.len() - 1].to_string()
-                        } else if let Some(pos) = raw_val.rfind('"') {
-                            raw_val[1..pos].to_string()
-                        } else {
-                            raw_val.trim_matches('"').to_string()
-                        }
-                    } else {
-                        // 非クォート値：行内コメント(#)を除去（簡易ルール）
-                        if let Some(pound) = raw_val.find('#') {
-                            raw_val[..pound].trim_end().to_string()
-                        } else {
-                            raw_val.to_string()
-                        }
-                    };
-                    if !key.is_empty() {
-                        std::env::set_var(key, val);
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("⚠️ tickwise.env の読み込み/サニタイズに失敗しました（無視されます）: {}", e);
-        }
-    }
-
-    let mut args = Args::parse();
-
-    // show-log-header モード専用ルート（ここだけに一本化）
-    /* 
-    if args.show_log_header {
-        let config = build_config(&args);
-        generate_csv_header(&config);
-        std::process::exit(0);
-    }
-
-    // ✅ ticker の必須チェック
-    let raw_ticker = match args.ticker {
-        Some(ref t) => t.clone(),
-        None => {
-            eprintln!("❌ --ticker は必須です");
-            std::process::exit(1);
-        }
-    };
-    */
-    
-    /* 
-    let env_path = Path::new("tickwise.env");
-    if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
-        if let Ok(mut tmpfile) = NamedTempFile::new() {
-            let content = lines.join("\n");
-            if tmpfile.write_all(content.as_bytes()).is_ok() {
-                if let Err(e) = from_path(tmpfile.path()) {
-                    eprintln!(
-                        "⚠️ tickwise.env の読み込みに失敗しました（無視されます）: {}",
-                        e
-                    );
-                }
-            }
-        }
-    }
-
-    let mut args = Args::parse();
-*/
-    // ✅ show-log-header モード専用ルート
-    if args.show_log_header {
-        let config = build_config(&args);
-        generate_csv_header(&config);
-        std::process::exit(0);
-    }
-
-    // ✅ ticker の必須チェック
-    let raw_ticker = match args.ticker {
-        Some(ref t) => t.clone(),
-        None => {
-            eprintln!("❌ --ticker は必須です");
-            std::process::exit(1);
-        }
-    };
-
-    // ✅ Ticker のサニタイズ
-    args.ticker = Some(sanitize_ticker(&raw_ticker).unwrap_or_else(|err| {
-        eprintln!("{err}");
-        std::process::exit(1);
-    }));
-    // ✅ ティッカーの正規化（インデックス名をETFに変換）
-    args.ticker = Some(normalize_ticker_input(args.ticker.as_deref().unwrap_or("")));
-
-    // ✅ ティッカーのサニタイズ（日本tickerの末尾加工）
-    //    - 日本株: #### → ####.T / ####.t → ####.T
-    //    - 海外: 大文字化のみ（BRK.B 等はそのまま）
-    args.ticker = Some(normalize_ticker(args.ticker.as_deref().unwrap_or("")));
-
-    // ✅ カスタムニュースクエリとLLMノートのサニタイズ
-    if let Some(q) = &args.custom_news_query {
-        args.custom_news_query = Some(sanitize_news_query(q).unwrap_or_else(|err| {
-            eprintln!("{err}");
-            std::process::exit(1);
-        }));
-    }
-
-    if let Some(n) = &args.openai_extra_note {
-        args.openai_extra_note = Some(sanitize_llm_note(n).unwrap_or_else(|err| {
-            eprintln!("{err}");
-            std::process::exit(1);
-        }));
-    }
-
-    let config = build_config(&args);
-    //if config.debug_args {
-    //    eprintln!("Config= {}", mask_secrets(&format!("{:?}", config), &config));
-    //}
-
-    if config.debug_args {
-        // 呼び出し確認のため一時ログ（確認後は削除して良い）
-        eprintln!("Config= {}", mask_secrets(&format!("{:?}", config), &config));    
-    }
-
-    // ✅ 以降は config.ticker を唯一のソース（SoT）
-    let ticker = config.ticker.clone();
-
-    let ticker_name_map = match &config.alias_csv {
-        Some(csv_path) => load_alias_csv(csv_path)?,
-        None => HashMap::new(),
-    };
-    // 例: if let Some(code) = jp_code_from_ticker(&ticker) { ticker_name_map.insert(code, hardcoded.formal_name.to_string()); }
-    // ハードコードされたティッカー名とクエリを追加
-    Ok((config, ticker, ticker_name_map))
-}
-*/
-// ...existing code...
-
+/// 環境変数と設定の初期化処理
 fn initialize_environment_and_config() -> BuildCfgResult {
     // 方針：tickwise.env を読み込み一般設定は env にセットするが、
     // セキュリティ上 API キー（OPENAI_API_KEY / BRAVE_API_KEY）はここでセットしない。
@@ -1158,8 +1004,11 @@ fn initialize_environment_and_config() -> BuildCfgResult {
 
 
     if config.debug_args {
+        if config.no_env_indicators {
+        }
         eprintln!("Config= {}", config_debug_string(&config));
     }
+
 
     let ticker = config.ticker.clone();
 
@@ -1171,162 +1020,7 @@ fn initialize_environment_and_config() -> BuildCfgResult {
     Ok((config, ticker, ticker_name_map))
 }
 
-
-// ...existing code...
-/* 
-async fn news_flow_controller(
-    guard: &TechnicalDataGuard,
-    config: &Config,
-) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
-    // Braveキー優先: CLI(config) -> tickwise.env（送信直前参照）
-    let brave_key_candidate = if !config.brave_api_key.trim().is_empty() {
-        Some(config.brave_api_key.clone())
-    } else {
-        None
-    };
-
-    let articles: Vec<Article> = if let Some(k) = brave_key_candidate {
-        // CLIキーがある場合はそれを使う（ゼロ化のため Zeroizing で包む）
-        let key_owned = Zeroizing::new(k);
-        let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
-        drop(key_owned);
-        fetched
-    } else {
-        // CLI に無い場合は tickwise.env を直前に参照
-        let mut found: Option<String> = None;
-        let env_path = Path::new("tickwise.env");
-        if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
-            for raw in lines {
-                let mut line = raw.trim().to_string();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                if let Some(rest) = line.strip_prefix("export ") {
-                    line = rest.trim().to_string();
-                }
-                if let Some(idx) = line.find('=') {
-                    let k = line[..idx].trim();
-                    if k.eq_ignore_ascii_case("BRAVE_API_KEY") {
-                        let raw_val = line[idx + 1..].trim();
-                        let v = if raw_val.starts_with('"') {
-                            if raw_val.len() >= 2 && raw_val.ends_with('"') {
-                                raw_val[1..raw_val.len() - 1].to_string()
-                            } else if let Some(pos) = raw_val.rfind('"') {
-                                raw_val[1..pos].to_string()
-                            } else {
-                                raw_val.trim_matches('"').to_string()
-                            }
-                        } else if let Some(pound) = raw_val.find('#') {
-                            raw_val[..pound].trim_end().to_string()
-                        } else {
-                            raw_val.to_string()
-                        };
-                        found = Some(v);
-                        break;
-                    }
-                }
-            }
-        }
-        if let Some(k) = found {
-            let key_owned = Zeroizing::new(k);
-            let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
-            drop(key_owned);
-            fetched
-        } else {
-            Vec::new()
-        }
-    };
-
-    let lines = compose_news_lines(guard, config, &articles);
-    if config.show_news {
-        let brave_key_missing = config.brave_api_key.trim().is_empty();
-        if brave_key_missing {
-            println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
-        } else {
-            print_lines_to_terminal(&lines);
-        }
-    }
-    Ok(articles)
-}
-*/
-/* 
-async fn news_flow_controller(
-    guard: &TechnicalDataGuard,
-    config: &Config,
-) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
-    // Braveキー優先: CLI(config) -> tickwise.env（送信直前参照）
-    let brave_key_candidate = if !config.brave_api_key.trim().is_empty() {
-        Some(config.brave_api_key.clone())
-    } else {
-        None
-    };
-
-    let articles: Vec<Article> = if let Some(k) = brave_key_candidate {
-        // CLIキーがある場合はそれを使う（ゼロ化のため Zeroizing で包む）
-        let key_owned = Zeroizing::new(k);
-        let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
-        drop(key_owned);
-        fetched
-    } else {
-        // CLI に無い場合は tickwise.env を直前に参照
-        let mut found: Option<String> = None;
-        let env_path = Path::new("tickwise.env");
-        if let Ok(lines) = sanitize_ascii_file_lines(env_path) {
-            for raw in lines {
-                let mut line = raw.trim().to_string();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                if let Some(rest) = line.strip_prefix("export ") {
-                    line = rest.trim().to_string();
-                }
-                if let Some(idx) = line.find('=') {
-                    let k = line[..idx].trim();
-                    if k.eq_ignore_ascii_case("BRAVE_API_KEY") {
-                        let raw_val = line[idx + 1..].trim();
-                        let v = if raw_val.starts_with('"') {
-                            if raw_val.len() >= 2 && raw_val.ends_with('"') {
-                                raw_val[1..raw_val.len() - 1].to_string()
-                            } else if let Some(pos) = raw_val.rfind('"') {
-                                raw_val[1..pos].to_string()
-                            } else {
-                                raw_val.trim_matches('"').to_string()
-                            }
-                        } else if let Some(pound) = raw_val.find('#') {
-                            raw_val[..pound].trim_end().to_string()
-                        } else {
-                            raw_val.to_string()
-                        };
-                        found = Some(v);
-                        break;
-                    }
-                }
-            }
-        }
-        if let Some(k) = found {
-            let key_owned = Zeroizing::new(k);
-            let fetched = run_news_once(guard, config, Some(&*key_owned)).await.unwrap_or_default();
-            drop(key_owned);
-            fetched
-        } else {
-            Vec::new()
-        }
-    };
-
-    let lines = compose_news_lines(guard, config, &articles);
-    if config.show_news {
-        let brave_key_missing = config.brave_api_key.trim().is_empty();
-        if brave_key_missing {
-            println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
-        } else {
-            print_lines_to_terminal(&lines);
-        }
-    }
-    Ok(articles)
-}
-*/
-
-// ...existing code...
+/// ニュース取得のコントローラ関数
 async fn news_flow_controller(
     guard: &TechnicalDataGuard,
     config: &Config,
@@ -1400,27 +1094,6 @@ async fn news_flow_controller(
     }
     Ok(articles)
 }
-// ...existing code...
-
-
-// ...existing code...
-
-// 追加: 最小マスク関数（既知キーの完全一致をダミーに置換するだけ）
-/* 
-fn mask_secrets(s: &str, cfg: &Config) -> String {
-    let mut out = s.to_string();
-    let k1 = cfg.openai_api_key.trim();
-    if !k1.is_empty() {
-        out = out.replace(k1, "<REDACTED_OPENAI_KEY>");
-    }
-    let k2 = cfg.brave_api_key.trim();
-    if !k2.is_empty() {
-        out = out.replace(k2, "<REDACTED_BRAVE_KEY>");
-    }
-    out
-}
-*/
-
 
 // 追加: debug 出力用（キーを露出しない、安全な表現を返す）
 fn config_debug_string(cfg: &Config) -> String {
@@ -1510,49 +1183,71 @@ fn parse_stance(stance: &str) -> Stance {
 
 /// コンフィグの構築
 fn build_config(args: &Args) -> Config {
+    
     Config {
         debug_args: args.debug_args,
+        no_env_indicators: args.no_env_indicators,
 
         // テクニカル閾値
         buy_rsi: if args.buy_rsi == 30.0 {
-            env::var("BUY_RSI")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(30.0)
+            if args.no_env_indicators {
+                30.0
+            } else {
+                env::var("BUY_RSI")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(30.0)
+            }
         } else {
             args.buy_rsi
         },
         sell_rsi: if args.sell_rsi == 70.0 {
-            env::var("SELL_RSI")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(70.0)
+            if args.no_env_indicators {
+                70.0
+            } else {
+                env::var("SELL_RSI")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(70.0)
+            }
         } else {
             args.sell_rsi
         },
         macd_diff_low: if args.macd_diff_low == 2.0 {
-            env::var("MACD_DIFF_LOW")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(2.0)
+            if args.no_env_indicators {
+                2.0
+            } else {
+                env::var("MACD_DIFF_LOW")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(2.0)
+            }
         } else {
             args.macd_diff_low
         },
         macd_diff_mid: if args.macd_diff_mid == 10.0 {
-            env::var("MACD_DIFF_MID")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(10.0)
+            if args.no_env_indicators {
+                10.0
+            } else {
+                env::var("MACD_DIFF_MID")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(10.0)
+            }
         } else {
             args.macd_diff_mid
         },
-
         // MACDマイナス圏フラグ
-        macd_minus_ok: args.macd_minus_ok || get_bool_env("MACD_MINUS_OK"),
-
+        macd_minus_ok: if args.no_env_indicators {
+            args.macd_minus_ok
+        } else {
+            args.macd_minus_ok || get_bool_env("MACD_MINUS_OK")
+        },
         // 投資スタンス設定
-        stance: {
-            let stance_source = if args.stance == "holder" {
+                stance: {
+            let stance_source = if args.no_env_indicators {
+                args.stance.clone()
+            } else if args.stance == "holder" {
                 std::env::var("STANCE").unwrap_or_else(|_| "holder".to_string())
             } else {
                 args.stance.clone()
@@ -1560,55 +1255,104 @@ fn build_config(args: &Args) -> Config {
             parse_stance(&stance_source)
         },
 
+
         // Weight設定
-        weight_basic: get_f64_from_args_or_env(args.weight_basic, "WEIGHT_BASIC", 1.0),
-        weight_ema: get_f64_from_args_or_env(args.weight_ema, "WEIGHT_EMA", 1.0),
-        weight_sma: get_f64_from_args_or_env(args.weight_sma, "WEIGHT_SMA", 1.0),
-        weight_bollinger: get_f64_from_args_or_env(args.weight_bollinger, "WEIGHT_BOLLINGER", 1.0),
-        weight_roc: get_f64_from_args_or_env(args.weight_roc, "WEIGHT_ROC", 1.0),
-        weight_adx: get_f64_from_args_or_env(args.weight_adx, "WEIGHT_ADX", 1.0),
-        weight_stochastics: get_f64_from_args_or_env(
-            args.weight_stochastics,
-            "WEIGHT_STOCHASTICS",
-            1.0,
-        ),
-        weight_fibonacci: get_f64_from_args_or_env(args.weight_fibonacci, "WEIGHT_FIBONACCI", 1.0),
-        weight_vwap: get_f64_from_args_or_env(args.weight_vwap, "WEIGHT_VWAP", 1.0),
-        weight_ichimoku: get_f64_from_args_or_env(args.weight_ichimoku, "WEIGHT_ICHIMOKU", 1.0),
+        weight_basic: if args.no_env_indicators {
+            args.weight_basic
+        } else {
+            get_f64_from_args_or_env(args.weight_basic, "WEIGHT_BASIC", 1.0)
+        },
+        weight_ema: if args.no_env_indicators {
+            args.weight_ema
+        } else {
+            get_f64_from_args_or_env(args.weight_ema, "WEIGHT_EMA", 1.0)
+        },
+        weight_sma: if args.no_env_indicators {
+            args.weight_sma
+        } else {
+            get_f64_from_args_or_env(args.weight_sma, "WEIGHT_SMA", 1.0)
+        },
+        weight_bollinger: if args.no_env_indicators {
+            args.weight_bollinger
+        } else {
+            get_f64_from_args_or_env(args.weight_bollinger, "WEIGHT_BOLLINGER", 1.0)
+        },
+        weight_roc: if args.no_env_indicators {
+            args.weight_roc
+        } else {
+            get_f64_from_args_or_env(args.weight_roc, "WEIGHT_ROC", 1.0)
+        },
+        weight_adx: if args.no_env_indicators {
+            args.weight_adx
+        } else {
+            get_f64_from_args_or_env(args.weight_adx, "WEIGHT_ADX", 1.0)
+        },
+        weight_stochastics: if args.no_env_indicators {
+            args.weight_stochastics
+        } else {
+            get_f64_from_args_or_env(args.weight_stochastics, "WEIGHT_STOCHASTICS", 1.0)
+        },
+        weight_fibonacci: if args.no_env_indicators {
+            args.weight_fibonacci
+        } else {
+            get_f64_from_args_or_env(args.weight_fibonacci, "WEIGHT_FIBONACCI", 1.0)
+        },
+        weight_vwap: if args.no_env_indicators {
+            args.weight_vwap
+        } else {
+            get_f64_from_args_or_env(args.weight_vwap, "WEIGHT_VWAP", 1.0)
+        },
+        weight_ichimoku: if args.no_env_indicators {
+            args.weight_ichimoku
+        } else {
+            get_f64_from_args_or_env(args.weight_ichimoku, "WEIGHT_ICHIMOKU", 1.0)
+        },
         // ✅ 拡張指標の選択（Vec<ExtensionIndicator> に変換）
-        enabled_extensions: {
+                enabled_extensions: {
             let mut extensions = Vec::new();
-            if args.ema || get_bool_env("EMA") {
+            if args.ema || (!args.no_env_indicators && get_bool_env("EMA")) {
                 extensions.push(ExtensionIndicator::Ema);
             }
-            if args.sma || get_bool_env("SMA") {
+            if args.sma || (!args.no_env_indicators && get_bool_env("SMA")) {
                 extensions.push(ExtensionIndicator::Sma);
             }
-            if args.roc || get_bool_env("ROC") {
+            if args.roc || (!args.no_env_indicators && get_bool_env("ROC")) {
                 extensions.push(ExtensionIndicator::Roc);
             }
-            if args.adx || get_bool_env("ADX") {
+            if args.adx || (!args.no_env_indicators && get_bool_env("ADX")) {
                 extensions.push(ExtensionIndicator::Adx);
             }
-            if args.stochastics || get_bool_env("STOCHASTICS") {
+            if args.stochastics || (!args.no_env_indicators && get_bool_env("STOCHASTICS")) {
                 extensions.push(ExtensionIndicator::Stochastics);
             }
-            if args.bollinger || get_bool_env("BOLLINGER") {
+            if args.bollinger || (!args.no_env_indicators && get_bool_env("BOLLINGER")) {
                 extensions.push(ExtensionIndicator::Bollinger);
             }
-            if args.fibonacci || get_bool_env("FIBONACCI") {
+            if args.fibonacci || (!args.no_env_indicators && get_bool_env("FIBONACCI")) {
                 extensions.push(ExtensionIndicator::Fibonacci);
             }
-            if args.vwap || get_bool_env("VWAP") {
+            if args.vwap || (!args.no_env_indicators && get_bool_env("VWAP")) {
                 extensions.push(ExtensionIndicator::Vwap);
             }
-            if args.ichimoku || get_bool_env("ICHIMOKU") {
+            if args.ichimoku || (!args.no_env_indicators && get_bool_env("ICHIMOKU")) {
                 extensions.push(ExtensionIndicator::Ichimoku);
             }
             extensions
         },
+
         bb_bandwidth_squeeze_pct: sanitize_percent(
-            args.bb_bandwidth_squeeze_pct, // clap が CLI or デフォルト(8.0) を保証
+            if args.bb_bandwidth_squeeze_pct == 8.0 {
+                if args.no_env_indicators {
+                    8.0
+                } else {
+                    env::var("BB_BANDWIDTH_SQUEEZE_PCT")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(8.0)
+                }
+            } else {
+                args.bb_bandwidth_squeeze_pct
+            },
             0.0,
             100.0,
             "Bollinger bandwidth squeeze threshold (%)",
@@ -1842,9 +1586,101 @@ fn jp_code_from_ticker(t: &str) -> Option<String> {
 }
 /// Yahoo Finance から市場データを取得する
 /// Yahoo v8/chart: use only meta.chartPreviousClose, meta.currency, indicators.quote[0].(o/h/l/c), timestamp. Do NOT use previousClose/regularMarket*/adjclose.
+
+/*
+async fn fetch_market_data(ticker: &str) -> Result<Vec<MarketData>, Box<dyn std::error::Error>> {
+    let ysym = if let Some(code) = jp_code_from_ticker(ticker) {
+        format!("{}.T", code)
+    } else {
+        ticker.trim().to_string()
+    };
+
+    let url = format!(
+        "https://query2.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=3mo",
+        urlencoding::encode(&ysym)
+    );
+
+    let client = Client::builder()
+        .user_agent("Mozilla/5.0 (Tickwise)")
+        .gzip(true)
+        .brotli(true)
+        .build()?;
+
+    let text = client
+        .get(&url)
+        .header("accept", "application/json")
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    let json: Value = serde_json::from_str(&text)?;
+    if json.get("chart").is_none() || !json["chart"]["error"].is_null() {
+        return Err("❌ Yahoo /v8 chart からの取得に失敗しました。".into());
+    }
+
+    let result = json["chart"]["result"]
+        .as_array()
+        .ok_or("❌ chart.result 配列なし")?;
+    if result.is_empty() {
+        return Err("❌ chart.result が空です。".into());
+    }
+
+    let r0 = &result[0];
+    let gmtoffset = r0["meta"]["gmtoffset"].as_i64().unwrap_or(0);
+    let tz = chrono::FixedOffset::east_opt(gmtoffset as i32)
+        .unwrap_or_else(|| chrono::FixedOffset::east_opt(0).unwrap());
+
+    let timestamps = r0["timestamp"]
+        .as_array()
+        .ok_or("❌ timestamp がありません。")?;
+    let q0 = &r0["indicators"]["quote"][0];
+    let highs = q0["high"].as_array().ok_or("❌ high がありません。")?;
+    let lows = q0["low"].as_array().ok_or("❌ low がありません。")?;
+    let closes = q0["close"].as_array().ok_or("❌ close がありません。")?;
+
+    let n = timestamps
+        .len()
+        .min(highs.len())
+        .min(lows.len())
+        .min(closes.len());
+    let mut out: Vec<MarketData> = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let ts = match timestamps[i].as_i64() {
+            Some(v) => v,
+            None => continue,
+        };
+        let (h, l, c) = (highs[i].as_f64(), lows[i].as_f64(), closes[i].as_f64());
+        if let (Some(h), Some(l), Some(c)) = (h, l, c) {
+            let dt = tz
+                .timestamp_opt(ts, 0)
+                .single()
+                .ok_or("❌ timestamp 変換失敗")?;
+            let date = dt.date_naive().to_string();
+            let datetime = dt.format("%Y-%m-%d %H:%M").to_string();
+
+            out.push(MarketData {
+                date,
+                datetime: Some(datetime),
+                timestamp: Some(ts),
+                high: h,
+                low: l,
+                close: c,
+                name: None,
+            });
+        }
+    }
+
+    if out.len() < 2 {
+        return Err("❌ 時系列データが2件未満のため、テクニカル指標を構築できません。".into());
+    }
+
+    Ok(out)
+}
+*/
 async fn fetch_market_data(
     ticker: &str,
-    //config: &Config,
 ) -> Result<Vec<MarketData>, Box<dyn std::error::Error>> {
     let ysym = if let Some(code) = jp_code_from_ticker(ticker) {
         format!("{}.T", code)
@@ -1884,6 +1720,23 @@ async fn fetch_market_data(
     }
 
     let r0 = &result[0];
+
+    let tz_name = r0["meta"]["exchangeTimezoneName"]
+        .as_str()
+        .unwrap_or("UTC")
+        .to_string();
+
+    // 取引所のIANAタイムゾーン名（exchangeTimezoneName）をTZDBで解決し、表示用TZを確定する
+    let tz_parsed: Result<Tz, _> = tz_name.parse();
+    let tz = match tz_parsed {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("⚠️ exchangeTimezoneName parse failed: {} -> fallback to UTC", tz_name);
+            chrono_tz::UTC
+        }
+    };
+    
+
     let timestamps = r0["timestamp"]
         .as_array()
         .ok_or("❌ timestamp がありません。")?;
@@ -1897,6 +1750,7 @@ async fn fetch_market_data(
         .min(highs.len())
         .min(lows.len())
         .min(closes.len());
+
     let mut out: Vec<MarketData> = Vec::with_capacity(n);
 
     for i in 0..n {
@@ -1904,16 +1758,23 @@ async fn fetch_market_data(
             Some(v) => v,
             None => continue,
         };
+
         let (h, l, c) = (highs[i].as_f64(), lows[i].as_f64(), closes[i].as_f64());
         if let (Some(h), Some(l), Some(c)) = (h, l, c) {
-            let date = chrono::Utc
+            // 取引所のIANAタイムゾーン名（exchangeTimezoneName）を取得し、表示に使うTZを確定する
+            let dt = tz
                 .timestamp_opt(ts, 0)
                 .single()
-                .ok_or("❌ timestamp 変換失敗")?
-                .date_naive()
-                .to_string();
+                .ok_or("❌ timestamp 変換失敗")?;
+
+            let date = dt.format("%Y-%m-%d").to_string();
+            let datetime = dt.format("%Y-%m-%d %H:%M").to_string();
+
             out.push(MarketData {
                 date,
+                datetime: Some(datetime),
+                timestamp: Some(ts),
+                timezone: Some(tz_name.clone()),
                 high: h,
                 low: l,
                 close: c,
@@ -1928,6 +1789,7 @@ async fn fetch_market_data(
 
     Ok(out)
 }
+
 
 /// エイリアスCSVの読み込み
 fn load_alias_csv(path: &str) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
@@ -1973,7 +1835,7 @@ fn build_basic_technical_entry(
 
     let latest = &data[data.len() - 1];
     let previous = &data[data.len() - 2];
-
+    
     let alias_name_opt =
         jp_code_from_ticker(&config.ticker).and_then(|code| ticker_name_map.get(&code).cloned());
 
@@ -2078,6 +1940,17 @@ fn build_basic_technical_entry(
     let mut guard = TechnicalDataGuard::new(config.ticker.clone(), latest.date.clone());
 
     guard.set_name(&name);
+    // ガードにタイムゾーンと日時情報をセット
+    if let Some(tz) = latest.timezone.as_deref() {
+        guard.set_timezone(tz);
+    }
+    if let Some(dt) = latest.datetime.as_deref() {
+        guard.set_datetime(dt);
+    }
+    if let Some(ts) = latest.timestamp {
+        guard.set_timestamp(ts);
+    }
+
     guard.set_close(latest.close);
     guard.set_previous_close(previous.close);
     guard.set_price_diff(diff);
@@ -2900,13 +2773,24 @@ fn display_main_info(config: &Config, guard: &TechnicalDataGuard) {
             .red()
         );
     }
+    /* 
     //  ── JST 現在日時を取得,基本情報表示 ──
     let now = Local::now();
     let date_jst = now.format("%Y-%m-%d").to_string();
     let time_jst = now.format("%H:%M").to_string();
-
+    */
+    
     println!("\n📊 銘柄: {}（{}）", guard.get_name(), guard.get_ticker());
-    println!("📅 日時: {} {} JST", date_jst, time_jst);
+    
+    let date = guard.get_date();
+    let time = guard
+        .get_datetime()
+        .and_then(|s| s.split_whitespace().nth(1))
+        .unwrap_or("--:--");
+
+    println!("📅 日時: {} {} {}", date, time, guard.get_timezone());
+    
+    //println!("📅 日時: {} {} JST", date_jst, time_jst);
     println!("💰 現在値　: {:.2}", guard.get_close());
     println!("💰 前日終値: {:.2}", guard.get_previous_close());
 
@@ -3907,6 +3791,8 @@ fn generate_csv_header(config: &Config) {
     let mut headers = vec![
         "ticker",
         "date",
+        "datetime", 
+        "timezone",
         "close",
         "prev_close",
         "diff",
@@ -3956,7 +3842,6 @@ fn generate_csv_header(config: &Config) {
     }
 
     headers.push("final_score");
-
     println!("{}", headers.join(",")); // ✅ 出力ここで完結
 }
 
@@ -4002,11 +3887,13 @@ fn save_technical_log(
 fn generate_technical_csv_row(
     guard: &TechnicalDataGuard,
     results: &[AnalysisResult],
-    snap: &FinalScoreSnapshot, // ← 追加
+    snap: &FinalScoreSnapshot, 
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut values = vec![
         guard.get_ticker().to_string(),
         guard.get_date().to_string(),
+        guard.get_datetime().unwrap_or("").to_string(), 
+        guard.get_timezone().to_string(),
         format!("{:.2}", guard.get_close()),
         format!("{:.2}", guard.get_previous_close()),
         format!("{:+.2}", guard.get_price_diff()),
@@ -4069,7 +3956,6 @@ fn generate_technical_csv_row(
         }
     }
 
-    // ここだけ差し替え
     values.push(snap.total_score.to_string()); // 互換維持のため to_string() のまま
 
     Ok(values.join(","))
@@ -4125,6 +4011,9 @@ fn generate_technical_json_string(
     let mut json_obj = json!({
         "ticker": guard.get_ticker(),
         "date": guard.get_date(),
+        "datetime": guard.get_datetime(),
+        "timestamp": guard.get_timestamp(),
+        "timezone": guard.get_timezone(),
         "close": guard.get_close(),
         "prev_close": guard.get_previous_close(),
         "diff": guard.get_price_diff(),
@@ -4201,48 +4090,7 @@ struct Article {
     published_at: Option<String>,
 }
 
-// ===== 0) フローコントローラ：取得→整形→(必要なら)出力、同じ行を返す =====
-// ニュースの取得と表示を司る。未設定/失敗は“スキップ明示”で継続する。
-// 取得だけに専念し、整形は compose_news_lines、出力は print_lines_to_terminal に委譲
 
-// --- 修正：収集→整形→出力しつつ、Vec<Article> を返す ---
-/* 
-async fn news_flow_controller(
-    guard: &TechnicalDataGuard,
-    config: &Config,
-) -> Result<Vec<Article>, Box<dyn std::error::Error>> {
-    // Braveキーは Config 経由のみ
-    let brave_key_opt = {
-        let s = config.brave_api_key.as_str();
-        if s.trim().is_empty() {
-            None
-        } else {
-            Some(s)
-        }
-    };
-
-    // 収集（未設定/失敗は空Vec。再収集・追加整形はしない）
-    let articles: Vec<Article> = match brave_key_opt {
-        None => Vec::new(),
-        Some(k) => run_news_once(guard, config, Some(k))
-            .await
-            .unwrap_or_default(), // 失敗時も空Vec
-    };
-
-    // 整形→出力（唯一の生成点＋プリンタ経由）
-    let lines = compose_news_lines(guard, config, &articles);
-    // 出力は show_news オプション時のみ
-    if config.show_news {
-        let brave_key_missing = config.brave_api_key.trim().is_empty();
-        if brave_key_missing {
-            println!("【注記】ニュース検索は BRAVE_API_KEY 未設定のためスキップ。");
-        } else {
-            print_lines_to_terminal(&lines);
-        }
-    }
-    Ok(articles)
-}
-*/
 
 // ===== 1) 検索ワード加工：ログ用の1行（SoTはここ） =====
 fn build_news_query_line_for_log(guard: &TechnicalDataGuard, config: &Config) -> String {
@@ -4738,9 +4586,7 @@ async fn compose_llm_prompt_lines(
     lines.push("- 小数は原則2桁。桁飛び・丸め過ぎ・矛盾記述は禁止。".to_string());
     lines.push("- 指標の略称は禁止。例　BBはダメ。ボリンジャーバンドと正しく出力".to_string());
     lines.push("【記述順序ルール】".to_string());
-   lines.push("- 中期の反転条件は「EMA長期 → 一目基準線 → VWAP と Fib 38.2%（併記） → SMA長期」の順で列挙。".to_string());
-    lines.push("- 短期シナリオは「SMA短期/EMA短期の回復 → Fib 50% → 一目転換線 → 一目基準線」を利確帯として段階記述。".to_string());
-    lines.push("- 用語は「ボリンジャーバンド下限/上限」で統一（初出のみ正式名。以後は“BB下限/BB上限”略称可）。".to_string());
+    lines.push("- 短期、中期の反転条件の順で共に与えられた各種指標の中で条件を想定し説明してください".to_string());
     lines.push(String::new());
 
     if let Some(note) = &config.openai_extra_note {
@@ -4753,69 +4599,7 @@ async fn compose_llm_prompt_lines(
 }
 
 // --- OpenAI送信（キー未設定はヒント表示で優しくスキップ） ---
-/* 
-async fn openai_send_prompt(
-    config: &Config,
-    prompt: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if config.no_llm {
-        return Ok(());
-    }
-    if config.llm_provider.trim() != "openai" {
-        return Ok(());
-    }
 
-    let openai_key = if !config.openai_api_key.trim().is_empty() {
-        config.openai_api_key.trim().to_string()
-    } else {
-        std::env::var("OPENAI_API_KEY").unwrap_or_default()
-    };
-
-    if openai_key.trim().is_empty() {
-        eprintln!("⚠️ OpenAI APIキーが未設定のため送信をスキップしました。");
-        eprintln!("   対応: `--openai-api-key <KEY>` または 環境変数 `OPENAI_API_KEY` を設定してください。");
-        eprintln!("   tickwise.envファイルを使う場合は、`OPENAI_API_KEY=sk-xxxxxxxx` のように記述してください。");
-        return Ok(());
-    }
-
-    let client = reqwest::Client::new();
-    let res = client
-        .post("https://api.openai.com/v1/chat/completions")
-        .bearer_auth(&openai_key)
-        .json(&serde_json::json!({
-            "model": config.openai_model,
-            "messages": [{ "role": "user", "content": prompt }],
-        }))
-        .send()
-        .await?;
-
-    if !res.status().is_success() {
-        let status = res.status();
-        let body = res.text().await.unwrap_or_default();
-        match status.as_u16() {
-            400 => eprintln!("❌ 不正なリクエスト(400)。モデル名やパラメータを確認してください。"),
-            401 => eprintln!("❌ 認証エラー(401)。APIキーが不正/期限切れの可能性。"),
-            403 => eprintln!("⛔ アクセス拒否(403)。権限不足または機能が無効化。"),
-            429 => eprintln!("⏳ レート制限(429)。時間を置いて再実行してください。"),
-            500..=599 => eprintln!(
-                "🛠️ 一時的な障害({}).時間を置いて再試行してください。",
-                status
-            ),
-            _ => eprintln!("❌ リクエスト失敗({}): {}", status, body),
-        }
-        return Err(format!("OpenAI request failed: {}", status).into());
-    }
-
-    let json: serde_json::Value = res.json().await?;
-    let content = json["choices"]
-        .get(0)
-        .and_then(|c| c["message"]["content"].as_str())
-        .ok_or("OpenAI APIのレスポンス形式が不正です")?;
-    println!("\n=== LLM Response  by {} ===\n", config.openai_model);
-    println!("{}", content);
-    Ok(())
-}
-*/
 async fn openai_send_prompt(
     config: &Config,
     prompt: &str,
