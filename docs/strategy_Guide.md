@@ -1,5 +1,6 @@
-# Tickwise Strategy Guide  
+# Tickwise Strategy Guide  V1.1
 （戦略設計・レシピ・検証ガイド）
+**— 鋼のロジックを、10のレシピで使い倒す —**
 
 ---
 
@@ -9,8 +10,7 @@
 
 - 戦略（レシピ）の設計方法
 - 分析結果の検証・再利用の方法
-# Tickwise Strategy Guide (v1.1)
-**— 鋼のロジックを、10のレシピで使い倒す —**
+
 
 ---
 
