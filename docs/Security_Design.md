@@ -40,9 +40,19 @@ APIキーは金銭的価値を持つ資産です。その露出時間を極限�
 - **露出の構造的ブロック:** ログや内部構造体からキーを排除。`--debug-args` 等の表示時もマスク処理を徹底しています。
 
 #### ● ソフトウェア・サプライチェーンの透明性
-- **SBOM (Software Bill of Materials) の提供:** CycloneDX形式のSBOMを生成。依存パッケージをすべて可視化し、サプライチェーン攻撃への耐性を高めています。
-- **バイナリ整合性検証:** 配布バイナリは VirusTotal でのスキャンをパスし、真正なものであることを証明。誤検知認定まで取得した誠実な配布プロセスを維持しています。
+####  依存関係の脆弱性スキャン (`cargo audit`)
+本プロジェクトでは、RustSecが提供するアドバイザリデータベースに基づき、定期的に `cargo audit` を実行し、全依存ライブラリ（243 crate dependencies）の脆弱性をチェックしています。
 
+```text
+Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
+Scanning Cargo.lock for vulnerabilities (243 crate dependencies)
+Success: No vulnerabilities found.
+```
+- **ポリシー**: 既知の脆弱性が発見された依存ライブラリは、直ちにアップデートまたは代替ライブラリへの差し替えが行われます。
+- **透明性**: 開発時のスキャン結果を公開することで、ユーザーが「どのバージョンのライブラリが使われているか」だけでなく「その安全性が検証されているか」を確認できるようにしています。
+
+#### SBOM (Software Bill of Materials) の提供
+CycloneDX形式でのSBOM生成をサポートし、使用している全コンポーネントの透明性を確保しています。
 ---
 
 ## 3. 可用性（Availability）：止まらない論理、揺るがない信頼
