@@ -2,12 +2,13 @@
 name = "tickwise"
 version = "1.1.0"
 edition = "2021"
-authors = ["koz"]
+authors = ["kozo2000"]
 description = "Stock analysis and news summarization tool using LLMs"
 license = "MIT"
 
 [profile.release]
-debug = 0            # = rustc -C debuginfo=0（デバッグ情報を出さない）
+debug = 0
+            # = rustc -C debuginfo=0（デバッグ情報を出さない）
 
 [dependencies]
 reqwest = { version = "0.12.15", features = ["blocking", "json", "gzip","brotli","cookies"] }
@@ -20,7 +21,7 @@ chrono = "0.4"
 #dotenv = "0.15"
 dotenvy = "0.15"
 clap = { version = "4.3", features = ["derive"] }
-urlencoding = "2.1.2"  # バージョンは最新が入る
+urlencoding = "2.1.2"  
 regex = "1"
 url = "2.2"
 colored = "3.0.0"
