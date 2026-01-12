@@ -4,6 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 
+## 株式投資に'AI'分析を使ってみたいと思ったことありませんか？ Tickwiseはそんなあなたを強力に支援するツールです。
+
+
 Tickwiseは、膨大なテクニカル指標、リアルタイムニュース、そしてLLM（大規模言語モデル）を高度に統合し、投資判断の「根拠」を構造化データとして生成する解析エンジンです。
 
 ---

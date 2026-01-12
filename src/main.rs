@@ -26,7 +26,7 @@ const EMA_EQ_EPS: f64 = 0.01; // 短期-長期の絶対差が±0.01未満なら�
 
 /// コマンドライン引数の構造定義
 #[derive(Parser, Debug)]
-#[command(name = "tickwise", version, about = "Stock Technical Analysis Tool")]
+#[command(name = "tickwise", version, about = "Bridging Classic Rigor with Future Intelligence Stock Technical 'AI' Analysis Engine. Created & Designed by Kozo2000")]
 struct Args {
     #[arg(
         short = 't',
@@ -1586,99 +1586,6 @@ fn jp_code_from_ticker(t: &str) -> Option<String> {
 }
 /// Yahoo Finance から市場データを取得する
 /// Yahoo v8/chart: use only meta.chartPreviousClose, meta.currency, indicators.quote[0].(o/h/l/c), timestamp. Do NOT use previousClose/regularMarket*/adjclose.
-
-/*
-async fn fetch_market_data(ticker: &str) -> Result<Vec<MarketData>, Box<dyn std::error::Error>> {
-    let ysym = if let Some(code) = jp_code_from_ticker(ticker) {
-        format!("{}.T", code)
-    } else {
-        ticker.trim().to_string()
-    };
-
-    let url = format!(
-        "https://query2.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=3mo",
-        urlencoding::encode(&ysym)
-    );
-
-    let client = Client::builder()
-        .user_agent("Mozilla/5.0 (Tickwise)")
-        .gzip(true)
-        .brotli(true)
-        .build()?;
-
-    let text = client
-        .get(&url)
-        .header("accept", "application/json")
-        .send()
-        .await?
-        .text()
-        .await?;
-
-    let json: Value = serde_json::from_str(&text)?;
-    if json.get("chart").is_none() || !json["chart"]["error"].is_null() {
-        return Err("❌ Yahoo /v8 chart からの取得に失敗しました。".into());
-    }
-
-    let result = json["chart"]["result"]
-        .as_array()
-        .ok_or("❌ chart.result 配列なし")?;
-    if result.is_empty() {
-        return Err("❌ chart.result が空です。".into());
-    }
-
-    let r0 = &result[0];
-    let gmtoffset = r0["meta"]["gmtoffset"].as_i64().unwrap_or(0);
-    let tz = chrono::FixedOffset::east_opt(gmtoffset as i32)
-        .unwrap_or_else(|| chrono::FixedOffset::east_opt(0).unwrap());
-
-    let timestamps = r0["timestamp"]
-        .as_array()
-        .ok_or("❌ timestamp がありません。")?;
-    let q0 = &r0["indicators"]["quote"][0];
-    let highs = q0["high"].as_array().ok_or("❌ high がありません。")?;
-    let lows = q0["low"].as_array().ok_or("❌ low がありません。")?;
-    let closes = q0["close"].as_array().ok_or("❌ close がありません。")?;
-
-    let n = timestamps
-        .len()
-        .min(highs.len())
-        .min(lows.len())
-        .min(closes.len());
-    let mut out: Vec<MarketData> = Vec::with_capacity(n);
-
-    for i in 0..n {
-        let ts = match timestamps[i].as_i64() {
-            Some(v) => v,
-            None => continue,
-        };
-        let (h, l, c) = (highs[i].as_f64(), lows[i].as_f64(), closes[i].as_f64());
-        if let (Some(h), Some(l), Some(c)) = (h, l, c) {
-            let dt = tz
-                .timestamp_opt(ts, 0)
-                .single()
-                .ok_or("❌ timestamp 変換失敗")?;
-            let date = dt.date_naive().to_string();
-            let datetime = dt.format("%Y-%m-%d %H:%M").to_string();
-
-            out.push(MarketData {
-                date,
-                datetime: Some(datetime),
-                timestamp: Some(ts),
-                high: h,
-                low: l,
-                close: c,
-                name: None,
-            });
-        }
-    }
-
-    if out.len() < 2 {
-        return Err("❌ 時系列データが2件未満のため、テクニカル指標を構築できません。".into());
-    }
-
-    Ok(out)
-}
-*/
 async fn fetch_market_data(
     ticker: &str,
 ) -> Result<Vec<MarketData>, Box<dyn std::error::Error>> {
@@ -1813,7 +1720,6 @@ async fn fetch_market_data(
 
     Ok(out)
 }
-
 
 /// エイリアスCSVの読み込み
 fn load_alias_csv(path: &str) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
@@ -2797,12 +2703,6 @@ fn display_main_info(config: &Config, guard: &TechnicalDataGuard) {
             .red()
         );
     }
-    /* 
-    //  ── JST 現在日時を取得,基本情報表示 ──
-    let now = Local::now();
-    let date_jst = now.format("%Y-%m-%d").to_string();
-    let time_jst = now.format("%H:%M").to_string();
-    */
     
     println!("\n📊 銘柄: {}（{}）", guard.get_name(), guard.get_ticker());
     
@@ -3244,7 +3144,7 @@ fn rank_adx_score(adx_score: Option<i32>) -> &'static str {
         _ => "⚠️ ADXスコア不明",
     }
 }
-
+/// ADX（平均方向性指数）の表示（セキュアアクセス：TechnicalDataGuard経由）
 fn render_adx(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResult {
     let mut description_lines: Vec<String> = Vec::new();
     description_lines.push("📊 【ADX（平均方向性指数）】".to_string());
@@ -3712,6 +3612,7 @@ fn render_ichimoku(config: &Config, guard: &TechnicalDataGuard) -> AnalysisResul
         }
     }
 }
+
 /// 単極ゲージ（Seller/Buyerの見た目長さ差を解消）。例: 「Buyer [.....█████] Seller」
 fn render_unipolar_gauge_rtl(
     percent: u8,
