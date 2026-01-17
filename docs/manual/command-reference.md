@@ -45,6 +45,7 @@ Tickwiseは、株価のテクニカル分析とニュース要約を行うCLIツ
 | `--macd-diff-low` | MACDとSignalの乖離「小」の閾値 | f64 | 2.0 | `MACD_DIFF_LOW` |
 | `--macd-diff-mid` | MACDとSignalの乖離「中」の閾値 | f64 | 10.0 | `MACD_DIFF_MID` |
 | `--macd-minus-ok` (`-m`) | MACDマイナス圏での買い判定を許可 | bool | false | `MACD_MINUS_OK` |
+| `--bb-bandwidth-squeeze-pct` | ボリンジャースクイーズ判定のしきい値(%) | f64 | 8.0 | `BB_BANDWIDTH_SQUEEZE_PCT` |
 
 ### 拡張指標の有効化
 フラグを指定するか、環境変数を `true` に設定することで有効になります。
@@ -102,14 +103,33 @@ Tickwiseは、株価のテクニカル分析とニュース要約を行うCLIツ
 ## 5. ログ・出力設定
 
 | オプション | 説明 | 型 | 既定値 | 環境変数 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `--save-technical-log` | 分析結果のファイル保存を有効化 | bool | false | `SAVE_TECHNICAL_LOG` |
+| :--- | :--- | :--- | :--- | :--- |
+| `--save-technical-log` | テクニカル分析ログを保存 | bool | false | `SAVE_TECHNICAL_LOG` |
 | `--log-format` | ログ形式（`csv` または `json`） | String | `csv` | `LOG_FORMAT` |
-| `--log-dir` | 保存先ディレクトリ | String | `log` | `LOG_DIR` |
-| `--stdout-log` | ログをファイルではなく標準出力に書き出す | bool | false | - |
+| `--log-dir` | ログ保存先ディレクトリ | String | `log` | `LOG_DIR` |
 | `--data-append` | 既存のCSVファイルに追記する | bool | false | `CSV_APPEND` |
 | `--log-flat` | ティッカー別のサブディレクトリを作成しない | bool | false | `LOG_FLAT` |
+| `--stdout-log` | ログを標準出力に書き出す | bool | false | - |
 | `--silent` | 標準出力を抑制（エラーのみ表示） | bool | false | - |
+
+### レポート出力調整（LLM）
+
+| オプション | 説明 | 型 | 既定値 |
+| :--- | :--- | :--- | :--- |
+| `--max-note-length` | 「注意ポイント」の最大文字数 | usize | 300 |
+| `--max-shortterm-length` | 「1週間短期目線」の最大文字数 | usize | 150 |
+| `--max-midterm-length` | 「1ヶ月中期目線」の最大文字数 | usize | 150 |
+| `--max-news-length` | 「ニュースハイライト」の最大文字数 | usize | 600 |
+| `--max-review-length` | 「総評」の最大文字数 | usize | 1000 |
+
+### デバッグ・開発用
+
+| オプション | 短縮 | 説明 |
+| :--- | :--- | :--- |
+| `--debug-prompt` | `-d` | OpenAIへのプロンプトをファイル保存し、送信しない |
+| `--debug-args` | - | 解析された引数を表示する |
+| `--show-news` | - | 取得したニュースをターミナルに表示する |
+| `--no-alias` | `-a` | 会社名エイリアスの展開をスキップする |
 
 ---
 
