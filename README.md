@@ -1,6 +1,14 @@
 # Tickwise v1.1
 
-Tickwiseは、投資判断を支援するためのコマンドライン（CLI）株式解析ツールです。
+Tickwiseは、投資---
+
+#### � 導入と活用ガイド
+
+Tickwiseを最大限に活用するためのガイドラインです。
+導入と活用ガイド
+
+Tickwiseを最大限に活用するためのガイドラインです。
+るためのコマンドライン（CLI）株式解析ツールです。
 テクニカル指標の算出とニュース収集を自動化し、客観的なデータをAI（LLM）に供給することで、根拠のある分析レポートを生成します。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -29,16 +37,20 @@ AIに価格予測を丸投げするのではなく、Rustで厳密に計算さ�
 
 ---
 
-## 📖 ドキュメント
+## � 導入と活用ガイド
 
-### 活用ガイド（投資家・トレーダー向け）
+Tickwiseを最大限に活用するためのガイドラインです。
+
 - [**投資家・トレーダー向け活用ガイド**](./docs/manual/investor-guide.md) ※最初にお読みください
-- [**インジケーターガイド**](./docs/manual/indicator-guide.md)
-- [**ストラテジーガイド**](./docs/manual/strategy_Guide.md)
+- [**セットアップガイド**](./docs/manual/setup.md) — 導入手順とAPIキーの設定
+- [**コマンドリファレンス**](./docs/manual/command-reference.md) — 各種オプションと実行例
+- [**インジケーターガイド**](./docs/manual/indicator-guide.md) — 搭載テクニカル指標の解説
+- [**ストラテジーガイド**](./docs/manual/strategy_Guide.md) — 投資判断のロジックと重み付け
 
-### 実装・技術詳細（開発者向け）
-- [**セットアップガイド**](./docs/manual/setup.md)
-- [**コマンドリファレンス**](./docs/manual/command-reference.md)
+## 🛠 設計・詳細仕様
+
+内部構造やセキュリティに関心がある方はこちらを参照してください。
+
 - [**設計思想とアーキテクチャ**](./docs/Dev_prog/Design_Philosophy.md)
 - [**セキュリティ設計**](./docs/Dev_prog/Security_Design.md)
 
