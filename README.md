@@ -1,6 +1,18 @@
 # Tickwise v1.1
 
-Tickwiseは、投資---
+Tickwiseは、投資判断を支援するためのコマンドラ---
+
+## 📘 導入と活用ガイド
+
+Tickwiseを最大限に活用するためのガイドラインです。
+）株式解析ツールです。
+テクニカル指標の算出とニュース収集を自動化し、客観的なデータをAI（LLM）に供給することで、根拠のある分析レポートを生成します。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
+
+---
+ickwiseは、投資---
 
 #### � 導入と活用ガイド
 
