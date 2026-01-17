@@ -1,6 +1,14 @@
 # Tickwise v1.1
 
-Tickwiseは、投資判断を支援するためのコマンドライン（CLI）株式分析ツールです。
+Tickwiseは、投資判断を支援するためのコマンドライン（CLI）株式## 🛠 セットアップと実行
+
+導入手順、APIキーの設定、および詳細な解説については以下のドキュメントを参照してください。
+
+- [**投資家・トレーダー向け活用ガイド**](./docs/manual/investor-guide.md) ※最初にお読みください
+- [**セットアップガイド**](./docs/manual/setup.md)
+- [**コマンドリファレンス**](./docs/manual/command-reference.md)
+- [**インジケーターガイド**](./docs/manual/indicator-guide.md)
+- [**ストラテジーガイド**](./docs/manual/strategy_Guide.md)。
 テクニカル指標の算出とニュース収集を自動化し、客観的なデータをAI（LLM）に供給することで、根拠のある分析レポートを生成します。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
