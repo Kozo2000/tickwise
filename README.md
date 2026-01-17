@@ -1,26 +1,6 @@
 # Tickwise v1.1
 
-Tickwiseは、投資判断を支援するためのコマンドラ---
-
-## 📘 導入と活用ガイド
-
-Tickwiseを最大限に活用するためのガイドラインです。
-）株式解析ツールです。
-テクニカル指標の算出とニュース収集を自動化し、客観的なデータをAI（LLM）に供給することで、根拠のある分析レポートを生成します。
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
-
----
-ickwiseは、投資---
-
-#### � 導入と活用ガイド
-
-Tickwiseを最大限に活用するためのガイドラインです。
-導入と活用ガイド
-
-Tickwiseを最大限に活用するためのガイドラインです。
-るためのコマンドライン（CLI）株式解析ツールです。
+Tickwiseは、投資判断を支援するためのコマンドライン（CLI）株式解析ツールです。
 テクニカル指標の算出とニュース収集を自動化し、客観的なデータをAI（LLM）に供給することで、根拠のある分析レポートを生成します。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -49,25 +29,6 @@ AIに価格予測を丸投げするのではなく、Rustで厳密に計算さ�
 
 ---
 
-## � 導入と活用ガイド
-
-Tickwiseを最大限に活用するためのガイドラインです。
-
-- [**投資家・トレーダー向け活用ガイド**](./docs/manual/investor-guide.md) ※最初にお読みください
-- [**セットアップガイド**](./docs/manual/setup.md) — 導入手順とAPIキーの設定
-- [**コマンドリファレンス**](./docs/manual/command-reference.md) — 各種オプションと実行例
-- [**インジケーターガイド**](./docs/manual/indicator-guide.md) — 搭載テクニカル指標の解説
-- [**ストラテジーガイド**](./docs/manual/strategy_Guide.md) — 投資判断のロジックと重み付け
-
-## 🛠 設計・詳細仕様
-
-内部構造やセキュリティに関心がある方はこちらを参照してください。
-
-- [**設計思想とアーキテクチャ**](./docs/Dev_prog/Design_Philosophy.md)
-- [**セキュリティ設計**](./docs/Dev_prog/Security_Design.md)
-
----
-
 ## ✨ 主な機能
 
 - **多角的なテクニカル解析**: RSI, MACD, ボリンジャーバンド, 一目均衡表, フィボナッチなどの主要指標から、ADXやROCなどの拡張指標まで幅広く対応。
@@ -85,6 +46,25 @@ Tickwiseを最大限に活用するためのガイドラインです。
 - **機密保護**: APIキーなどの機密情報はメモリ上の滞留時間を極小化し、利用直後にゼロパディング（0クリア）を行っています。
 - **アルゴリズムの透明性と独立性**: 指標計算には一般に公表されている数学的アルゴリズムおよび標準的なオープンソースライブラリ（`ta` crate等）を採用し、独自に実装されています。特定の商用製品の模倣を目的としたものではなく、先端技術の統合を追求する独立した実験的プロジェクトです。
 - **データの一貫性 (SOT)**: 指標算出後のデータは内部的にカプセル化（`TechnicalDataGuard`）され、レポート生成過程での数値の等価性を保証しています。
+
+---
+
+## 🚀 導入と活用ガイド
+
+Tickwiseを最大限に活用するためのガイドラインです。
+
+- [**投資家・トレーダー向け活用ガイド**](./docs/manual/investor-guide.md) ※最初にお読みください
+- [**セットアップガイド**](./docs/manual/setup.md) — 導入手順とAPIキーの設定
+- [**コマンドリファレンス**](./docs/manual/command-reference.md) — 各種オプションと実行例
+- [**インジケーターガイド**](./docs/manual/indicator-guide.md) — 搭載テクニカル指標の解説
+- [**ストラテジーガイド**](./docs/manual/strategy_Guide.md) — 投資判断のロジックと重み付け
+
+## 🛠 設計・詳細仕様
+
+内部構造やセキュリティに関心がある方はこちらを参照してください。
+
+- [**設計思想とアーキテクチャ**](./docs/Dev_prog/Design_Philosophy.md)
+- [**セキュリティ設計**](./docs/Dev_prog/Security_Design.md)
 
 ---
 
