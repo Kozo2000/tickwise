@@ -1,14 +1,6 @@
 # Tickwise v1.1
 
-Tickwiseは、投資判断を支援するためのコマンドライン（CLI）株式## 🛠 セットアップと実行
-
-導入手順、APIキーの設定、および詳細な解説については以下のドキュメントを参照してください。
-
-- [**投資家・トレーダー向け活用ガイド**](./docs/manual/investor-guide.md) ※最初にお読みください
-- [**セットアップガイド**](./docs/manual/setup.md)
-- [**コマンドリファレンス**](./docs/manual/command-reference.md)
-- [**インジケーターガイド**](./docs/manual/indicator-guide.md)
-- [**ストラテジーガイド**](./docs/manual/strategy_Guide.md)。
+Tickwiseは、投資判断を支援するためのコマンドライン（CLI）株式解析ツールです。
 テクニカル指標の算出とニュース収集を自動化し、客観的なデータをAI（LLM）に供給することで、根拠のある分析レポートを生成します。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -37,7 +29,22 @@ AIに価格予測を丸投げするのではなく、Rustで厳密に計算さ�
 
 ---
 
-## 🚀 主な機能
+## 📖 ドキュメント
+
+### 活用ガイド（投資家・トレーダー向け）
+- [**投資家・トレーダー向け活用ガイド**](./docs/manual/investor-guide.md) ※最初にお読みください
+- [**インジケーターガイド**](./docs/manual/indicator-guide.md)
+- [**ストラテジーガイド**](./docs/manual/strategy_Guide.md)
+
+### 実装・技術詳細（開発者向け）
+- [**セットアップガイド**](./docs/manual/setup.md)
+- [**コマンドリファレンス**](./docs/manual/command-reference.md)
+- [**設計思想とアーキテクチャ**](./docs/Dev_prog/Design_Philosophy.md)
+- [**セキュリティ設計**](./docs/Dev_prog/Security_Design.md)
+
+---
+
+## ✨ 主な機能
 
 - **多角的なテクニカル解析**: RSI, MACD, ボリンジャーバンド, 一目均衡表, フィボナッチなどの主要指標から、ADXやROCなどの拡張指標まで幅広く対応。
 - **ニュース・サマライズ機能**: 指定したティッカーに関連する最新のニュースを自動取得し、LLMが重要度を見極めて要約。
@@ -54,18 +61,6 @@ AIに価格予測を丸投げするのではなく、Rustで厳密に計算さ�
 - **機密保護**: APIキーなどの機密情報はメモリ上の滞留時間を極小化し、利用直後にゼロパディング（0クリア）を行っています。
 - **アルゴリズムの透明性と独立性**: 指標計算には一般に公表されている数学的アルゴリズムおよび標準的なオープンソースライブラリ（`ta` crate等）を採用し、独自に実装されています。特定の商用製品の模倣を目的としたものではなく、先端技術の統合を追求する独立した実験的プロジェクトです。
 - **データの一貫性 (SOT)**: 指標算出後のデータは内部的にカプセル化（`TechnicalDataGuard`）され、レポート生成過程での数値の等価性を保証しています。
-
-詳細なセキュリティ設計については [Security_Design.md](./docs/Dev_prog/Security_Design.md) を、開発思想とアーキテクチャの詳細は [Design_Philosophy.md](./docs/Dev_prog/Design_Philosophy.md) を参照してください。
-
----
-
-## 🛠 セットアップと実行
-
-導入手順、APIキーの設定、および詳細なコマンド解説については以下のドキュメントを参照してください。
-
-- [**セットアップガイド**](./docs/manual/setup.md)
-- [**コマンドリファレンス**](./docs/manual/command-reference.md)
-- [**インジケーターガイド**](./docs/manual/indicator-guide.md)
 
 ---
 
