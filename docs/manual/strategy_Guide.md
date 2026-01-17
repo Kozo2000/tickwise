@@ -149,7 +149,7 @@ tickwise -t <TICKER> -I --stance holder --sell-rsi 65 --macd-diff-mid 5 --bollin
 ### ⑨ 【全方位】AIセカンドオピニオン
 全指標をフル稼働させ、AIに「指標間の不整合」を炙り出させます。
 ```bash
-tickwise -t <TICKER> -I --ema --sma --bollinger --fibonacci --adx --ichimoku --vwap --llm
+tickwise -t <TICKER> -I --ema --sma --bollinger --fibonacci --adx --ichimoku --vwap
 ```
 - **論理**: 人間では見きれない多角的データをAIにぶつけ、総合的な「穴」を指摘させるためのレーダーチャート設定。
 
@@ -163,7 +163,7 @@ tickwise -t <TICKER> -I --ema --sma --bollinger --fibonacci --adx --ichimoku --v
 ### ⑩ 【情報戦】材料・テーマ深掘り
 テクニカルはベースに留め、ニュースの「中身」をAIに徹底的に読み込ませます。
 ```bash
-tickwise -t <TICKER> -I --llm --news -q "業績予想 修正 増配" --weight-news 3.0 --news-count 20
+tickwise -t <TICKER> -I -q "業績予想 修正 増配" --weight-news 3.0 --news-count 20
 ```
 - **論理**: カスタムクエリ `-q` で材料を絞り込み、AIの総評を「情報先行」の投資判断に活用します。
 
