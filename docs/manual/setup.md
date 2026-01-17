@@ -25,15 +25,15 @@ Tickwise を実行するために必要な準備は次の 4 点です。
 ### 2-1. バイナリのダウンロード
 [Binary フォルダ](../../Binary) から、環境に合ったファイルをダウンロードしてください。
 
-- **Windows版**: `tickwise-Win64-vX_X.zip`
-- **macOS版**: `tickwise-MacOS-ARM-vX_X.zip`（Apple Silicon搭載Mac用）
+- **Windows版**: `tickwise-Win64-v1_1.zip`
+- **macOS版**: `tickwise-MacOS-ARM-v1_1.zip`（Apple Silicon搭載Mac用）
 
 ### 2-2. ハッシュ（SHA-256）の確認
 安全のため、ダウンロードしたファイルが正規のものであるか確認することを推奨します。
 
 - **ハッシュファイル名**: 
-  - Windows: `tickwise_vX_X_windows-64_hash_sha256.txt`
-  - macOS: `tickwise_vX_X_Mac_ARM_hash_sha256.txt`
+  - Windows: `tickwise_v1_1_windows-64_hash_sha256.txt`
+  - macOS: `tickwise_v1_1_Mac_ARM_hash_sha256.txt`
 
 - **確認コマンド**:
   - **Windows (PowerShell)**:
