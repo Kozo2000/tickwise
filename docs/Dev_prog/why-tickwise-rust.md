@@ -37,6 +37,11 @@ C++ would also have been viable with disciplined idioms, sanitizers, and thoroug
 
 Bottom line: tickwise uses Rust so one person can ship safely today and a team can build on it tomorrow—not because C++ can’t, but because this stack fits our constraints.
 
+The project continues to evolve, but the core foundation remains: predictable, efficient, and safe.
+
+---
+👉 [Design Philosophy & Architecture](./Design_Philosophy.md)
+
 🔍 なぜ tickwise は Rust を選んだか（作者メモ）
 
 ※ 現在は個人開発、将来のチーム開発を見据えた設計です。
@@ -75,4 +80,9 @@ FFI 余地を残し、必要なら C/C++ 資産とも連携可能。
 C++ でも、作法・サニタイザ・レビューを徹底すれば成立します。
 ただ、個人開発 × 短いリリースサイクルという前提では、borrow checker によるコンパイル時保証に寄りかかる方が、リスクと手戻りを抑えられると判断しました。
 
-結論： tickwise は 今日ひとりで安全に出せて、明日チームで拡張しやすいことを軸に Rust を選択しました。これは“C++を否定するため”ではなく、本プロジェクトの制約に最も適した選択です。
+結論： tickwise は 今日ひとりで安全に出せて、明日チームで拡張しやすいことを軸に Rust を選択しました。
+
+The project continues to evolve, but the core foundation remains: predictable, efficient, and safe.
+
+---
+👉 [Design Philosophy & Architecture](./Design_Philosophy.md)

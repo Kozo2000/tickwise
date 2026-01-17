@@ -8,24 +8,54 @@ README とは役割を分け、「動かすところまで」 に集中してい
 
 # 1. はじめに
 
-Tickwise を実行するために必要な準備は次の 3 点です。
+Tickwise を実行するために必要な準備は次の 4 点です。
 
-東証の銘柄一覧（Excel → CSV）の準備
+1. **バイナリの入手とハッシュ確認**
+2. **東証の銘柄一覧（Excel → CSV）の準備**
+3. **API キー（OpenAI / Brave）の取得**
+4. **tickwise.env の作成**
 
-API キー（OpenAI / Brave）の取得
+所要時間の目安：10〜20 分
 
-tickwise.env の作成
+# 2. バイナリの入手とハッシュ確認
 
-所要時間の目安：5〜15 分
+まず、実行に必要なプログラム本体を入手し、改ざんや破損がないか検証します。
 
-# 2. 東証の銘柄一覧（Excel → CSV）を準備する
+### 2-1. バイナリのダウンロード
+[Binary フォルダ](../../Binary) から、ご自身の環境に合ったファイルをダウンロードしてください。
+
+- **Windows版**: `tickwise-Win64-vX_X.zip`
+- **macOS版**: `tickwise-MacOS-ARM-vX_X.zip`（Apple Silicon搭載Mac用）
+
+### 2-2. ハッシュ（SHA-256）の確認
+安全のため、ダウンロードしたファイルが正規のものであるか、[Binary フォルダ](../../Binary) 内のハッシュファイルを使用して確認することを推奨します。
+
+- **ハッシュファイル名**: 
+  - Windows: `tickwise_vX_X_windows-64_hash_sha256.txt`
+  - macOS: `tickwise_vX_X_Mac_ARM_hash_sha256.txt`
+- **確認手順**:
+  - **Windows (PowerShell)**:
+    ```powershell
+    Get-FileHash .\tickwise-release.zip -Algorithm SHA256
+    ```
+  - **macOS / Linux**:
+    ```bash
+    shasum -a 256 tickwise-release.zip
+    ```
+
+表示された文字列が、配布元のハッシュファイルに記載された値と完全に一致することを確認してください。一致しない場合はファイルが破損しているか、不正に書き換えられている可能性があるため、実行しないでください。
+
+### 2-3. 展開（解凍）
+確認後、zipファイルを適切なフォルダ（例: `C:\tickwise` や `~/tickwise`）に展開します。
+
+# 3. 東証の銘柄一覧（Excel → CSV）を準備する
 
 （迷わない最短ルート）
 
 Tickwise は日本株の銘柄コード正規化のために、
 東証が公開している「上場銘柄一覧（Excel）」 を CSV に変換して使用します。
 
-2-1. 銘柄一覧が置いてある公式ページ（直リンク）
+3-1. 銘柄一覧が置いてある公式ページ（直リンク）
 
 以下の URL を開いてください：
 
@@ -35,7 +65,7 @@ https://www.jpx.co.jp/markets/statistics-equities/misc/01.html
 
 ※ 東証のサイト構成変更により URL が変わる可能性があります。
 
-2-2. ダウンロードするファイルの目印
+3-2. ダウンロードするファイルの目印
 
 Excel 形式（.xls / .xlsx）
 
@@ -51,7 +81,7 @@ meigara_list.xlsx
 
 Excel のリンクであれば基本的に問題ありません。
 
-2-3. CSV（UTF-8）に変換する
+3-3. CSV（UTF-8）に変換する
 
 Excel または互換ソフトでファイルを開き、
 「名前を付けて保存 → CSV UTF-8（カンマ区切り）」 を選択します。
@@ -64,14 +94,14 @@ Excel または互換ソフトでファイルを開き、
 
 保存後、拡張子が .csv になっていることを確認
 
-2-4. 保存場所の例
+3-4. 保存場所の例
 tickwise_data/tse_list.csv
 
 
 このパスは後で設定します。
 
-# 3. API キーの取得
-3-1. OpenAI API キー（ニュース要約に使用）
+# 4. API キーの取得
+4-1. OpenAI API キー（ニュース要約に使用）
 
 https://platform.openai.com/
 
@@ -81,7 +111,7 @@ sk-xxxx の形式で発行されます
 
 ※ OpenAI の料金体系に従います。
 
-3-2. Brave News API キー（ニュース取得に使用）
+4-2. Brave News API キー（ニュース取得に使用）
 
 https://brave.com/search/api/
 
@@ -91,7 +121,7 @@ brv-xxxx の形式
 
 ※ ニュース機能を使わない場合は不要です。
 
-3-3. Yahoo Finance（株価取得）
+4-3. Yahoo Finance（株価取得）
 
 Tickwise は Yahoo Finance v7（非公式） を利用します。
 
@@ -102,7 +132,7 @@ API キー不要
 正確性・遅延・欠損は保証されません
 
 
-# 4. tickwise.env の作成（sample を使う方法・推奨）
+# 5. tickwise.env の作成（sample を使う方法・推奨）
 
 Tickwise では設定ファイルとして
 tickwise.env を 1 つだけ使用します。
@@ -112,7 +142,12 @@ tickwise.env.sample が用意されています。
 
 👉 この sample をコピーして使うのが最も安全で確実です。
 
-4-1. tickwise.env.sample をコピーする
+⚠️ **APIキー取り扱いに関する重要事項**
+APIキー（OpenAI / Brave）は、あなた個人の資産やプライバシーに直結する非常に重要な情報です。
+- **絶対に第三者に教えたり、スクリーンショットを公開したりしないでください。**
+- `tickwise.env` ファイルはローカル環境でのみ管理し、GitHub などの公開リポジトリに誤ってプッシュしないよう十分に注意してください（既定で `.gitignore` に追加されています）。
+
+5-1. tickwise.env.sample をコピーする
 
 リポジトリ直下にある tickwise.env.sample をコピーし、
 ファイル名を tickwise.env（拡張子なし） に変更します。
@@ -122,7 +157,7 @@ tickwise.env.sample  →  tickwise.env
 
 ※ .env や .txt にならないよう注意してください。
 
-4-2. セットアップ時に「必ず編集する項目」
+5-2. セットアップ時に「必ず編集する項目」
 
 最初に編集が必要なのは API キーだけ です。
 
@@ -140,7 +175,7 @@ Brave：ニュース取得を使う場合に必要
 ※ どちらも使わない場合は空欄のままでも動作します
 （--no-llm / --no-news などで制御可能）
 
-4-3. セットアップ段階では「触らなくてよい項目」
+5-3. セットアップ段階では「触らなくてよい項目」
 
 以下の項目は 初期値のままで問題ありません。
 
@@ -186,7 +221,7 @@ WEIGHT_EMA=1.0
 これらは 戦略設計用の項目です。
 セットアップ確認や初回実行では触る必要はありません。
 
-4-4. OpenAI / ニュース設定について
+5-4. OpenAI / ニュース設定について
 
 OPENAI_MODEL=gpt-5
 
@@ -201,7 +236,7 @@ NO_OPENAI=false
 
 --no-llm / --no-news を使えば env 側を触らずに制御可能
 
-4-5. ログ関連設定（後回しでOK）
+5-5. ログ関連設定（後回しでOK）
 
 SAVE_TECHNICAL_LOG=false
 
@@ -219,7 +254,7 @@ CSV_APPEND=false
 ※ LOG_DIR は 実行フォルダ依存になるため、
 必要に応じて 環境変数で上書きするのが推奨です。
 
-4-6. エイリアス CSV について
+5-6. エイリアス CSV について
 ALIAS_CSV=data_j.csv
 
 
@@ -229,7 +264,7 @@ ALIAS_CSV=data_j.csv
 
 初期セットアップでは 深追い不要
 
-4-7. まとめ：セットアップ時の最小作業
+5-7. まとめ：セットアップ時の最小作業
 
 セットアップ時にやることは、実質これだけです：
 
@@ -254,14 +289,14 @@ tickwise.env
 
 API キーは tickwise.env で管理することを推奨します。
 
-# 5. 初回動作チェック（セットアップ確認用テスト）
+# 6. 初回動作チェック（セットアップ確認用テスト）
 
 このセクションは、Tickwise 本体が正常に起動し、
 テクニカル指標の計算まで到達できるかを確認するためのテストです。
 
 通常の分析用途ではありません。
 
-5-1. テスト用の最小コマンド
+6-1. テスト用の最小コマンド
 
 以下は セットアップ確認専用のテストコマンド です。
 
@@ -279,7 +314,7 @@ LLM 要約なし
 という構成で、
 外部依存を最小限にした状態で動作確認を行います。
 
-5-2. 確認できること
+6-2. 確認できること
 
 Tickwise が起動する
 
@@ -289,7 +324,7 @@ Tickwise が起動する
 
 テクニカル指標の計算が最後まで実行される
 
-5-3. 成功時の目安
+6-3. 成功時の目安
 
 以下のような出力が表示されれば、
 セットアップは概ね問題ありません。
@@ -300,7 +335,7 @@ Tickwise が起動する
 
 RSI / MACD / ボリンジャーバンドなどの指標値
 
-5-4. 注意
+6-4. 注意
 
 このコマンドは：
 
@@ -312,14 +347,14 @@ RSI / MACD / ボリンジャーバンドなどの指標値
 
 通常の分析では使用し続けるものではありません。
 
-# 6. 応用：実行フォルダに依存しない設定（推奨）
+# 7. 応用：実行フォルダに依存しない設定（推奨）
 
 ショートカット起動、タスク実行、CI などでは、
 実行フォルダ依存でファイル参照が失敗することがあります。
 
 その場合、パス情報のみを環境変数で指定すると安定します。
 
-6-1. 環境変数で指定するのに適した項目
+7-1. 環境変数で指定するのに適した項目
 
 銘柄 CSV ファイルのパス
 
@@ -329,7 +364,7 @@ Tickwise のベースディレクトリ
 
 API キーは 環境変数に設定せず、tickwise.env に置くことを推奨します。
 
-6-2. Windows（PowerShell）
+7-2. Windows（PowerShell）
 
 $env:TICKWISE_BASE_DIR="C:\tickwise"
 
@@ -339,7 +374,7 @@ $env:TICKWISE_LOG_DIR="C:\tickwise\logs"
 
 
 
-6-3. Windows（cmd.exe）
+7-3. Windows（cmd.exe）
 
 set TICKWISE_BASE_DIR=C:\tickwise
 
@@ -350,7 +385,7 @@ set TICKWISE_LOG_DIR=C:\tickwise\logs
 
 
 
-6-4. macOS / Linux（bash / zsh）
+7-4. macOS / Linux（bash / zsh）
 
 export TICKWISE_BASE_DIR="$HOME/tickwise"
 
@@ -359,7 +394,7 @@ export TSE_LIST_FILE="$HOME/tickwise/data/tse_list.csv"
 export TICKWISE_LOG_DIR="$HOME/tickwise/logs"
 
 
-6-5. 設定の優先順位
+7-5. 設定の優先順位
 
 環境変数
 
@@ -367,7 +402,7 @@ tickwise.env
 
 デフォルト値
 
-# 7. トラブルシューティング（抜粋）
+# 8. トラブルシューティング（抜粋）
 
 CSV が文字化けする
 → CSV UTF-8 で保存されているか確認
