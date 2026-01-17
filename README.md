@@ -55,9 +55,9 @@ AIに価格予測を丸投げするのではなく、Rustで厳密に計算さ�
 
 導入手順、APIキーの設定、および詳細なコマンド解説については以下のドキュメントを参照してください。
 
-- [**セットアップガイド**](./docs/setup.md)
-- [**コマンドリファレンス**](./docs/command-reference.md)
-- [**インジケーターガイド**](./docs/indicator-guide.md)
+- [**セットアップガイド**](./docs/manual/setup.md)
+- [**コマンドリファレンス**](./docs/manual/command-reference.md)
+- [**インジケーターガイド**](./docs/manual/indicator-guide.md)
 
 ---
 
