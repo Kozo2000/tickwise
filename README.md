@@ -7,6 +7,8 @@ Tickwiseは、投資判断を支援するためのコマンドライン（CLI）
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg)](https://www.rust-lang.org/)
 
 ---
+## 実行結果サンプル
+./sample/nvdia_reversal-20260117.pdf
 
 ## 🎯 プロダクトの独自性と提供価値
 
