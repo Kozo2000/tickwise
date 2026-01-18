@@ -8,7 +8,7 @@ Tickwiseは、投資判断を支援するためのコマンドライン（CLI）
 
 ---
 ## 実行結果サンプル
-./sample/nvdia_reversal-20260117.pdf
+- [**サンプル**](../sample/nvdia_reversal-20260117.pdf)
 
 ## 🎯 プロダクトの独自性と提供価値
 
