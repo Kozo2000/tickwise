@@ -145,18 +145,30 @@ tickwise -t 7203.T --no-llm --no-news
 
 # 7. 応用：実行環境の安定化（推奨）
 
-ショートカットやタスクスケジューラから起動する場合、パスの指定が不安定になることがあります。その場合は環境変数で絶対パスを指定してください。
+ショートカットやタスクスケジューラから起動する場合、カレントディレクトリが意図せず変更され、設定ファイルやログのパスが不安定になることがあります。
+
+> [!CAUTION]
+> **tickwise.env の場所について**
+> 現在のバージョンでは、`tickwise.env` は「コマンドを実行しているディレクトリ（カレントディレクトリ）」に置かれている必要があります。パス（PATH）を通した場所から実行する場合も、設定情報が必要な場合はその作業ディレクトリに `.env` を配置してください。
+
+パス情報を環境変数で**絶対パス**として指定すると、ファイルの参照が安定します。
 
 ### Windows (PowerShell) の例
 ```powershell
-$env:TICKWISE_BASE_DIR="C:\tickwise"
-$env:TSE_LIST_FILE="C:\tickwise\data\tse_list.csv"
+# 銘柄リスト（CSV）の場所を固定
+$env:ALIAS_CSV="C:\tickwise\data\tse_list.csv"
+
+# ログ出力先を固定
+$env:LOG_DIR="C:\tickwise\logs"
 ```
 
 ### macOS / Linux の例
 ```bash
-export TICKWISE_BASE_DIR="$HOME/tickwise"
-export TSE_LIST_FILE="$HOME/tickwise/data/tse_list.csv"
+# 銘柄リスト（CSV）の場所を固定
+export ALIAS_CSV="$HOME/tickwise/data/tse_list.csv"
+
+# ログ出力先を固定
+export LOG_DIR="$HOME/tickwise/logs"
 ```
 
 ---
