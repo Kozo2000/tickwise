@@ -102,10 +102,10 @@ Tickwise は銘柄コードの正規化のために、東証が公開してい�
 
 > [!WARNING]
 > **APIキーの取り扱いについて**
-> APIキーは重要な個人情報です。絶対に第三者に公開しないでください。`.env` ファイルはローカル環境でのみ管理し、Git 等の公開設定には含めないよう注意してください。
+> APIキーは重要な個人情報です。絶対に第三者に公開しないでください。`tickwise.env` はローカル環境でのみ管理し、Git 等の公開設定には含めないよう注意してください。
 
 ### 5-1. ファイルの作成
-リポジトリ直下の `tickwise.env.sample` をコピーし、ファイル名を `tickwise.env` に変更します。
+リポジトリの [**Binary/tickwise.env.sample**](../../Binary/tickwise.env.sample) をコピーし、ファイル名を `tickwise.env` に変更します。
 
 ```text
 tickwise.env.sample  →  tickwise.env
